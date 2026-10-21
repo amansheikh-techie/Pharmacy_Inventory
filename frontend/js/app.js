@@ -377,7 +377,7 @@ function renderRecentSales() {
         <td><span class="font-mono">${sale.invoiceNumber}</span></td>
         <td>${patient ? patient.name : 'Walk-in Customer'}</td>
         <td>${sale.items.length} item(s)</td>
-        <td><strong>$${sale.totalAmount.toFixed(2)}</strong></td>
+        <td><strong>₹${sale.totalAmount.toFixed(2)}</strong></td>
         <td><span class="badge-status badge-info">${sale.paymentMethod}</span></td>
       </tr>
     `;
@@ -572,8 +572,8 @@ function renderBatchesTable(filterMedicineId = null) {
             ${status.days < 0 ? `Expired ${Math.abs(status.days)}d ago` : `${status.days}d remaining`}
           </span>
         </td>
-        <td>$${b.purchasePrice.toFixed(2)}</td>
-        <td><strong>$${b.sellingPrice.toFixed(2)}</strong></td>
+        <td>₹${b.purchasePrice.toFixed(2)}</td>
+        <td><strong>₹${b.sellingPrice.toFixed(2)}</strong></td>
         <td><strong>${b.stock}</strong> <span style="font-size:0.75rem; color:var(--text-muted);">(Min ${b.reorderLevel})</span></td>
         <td><span class="badge-status ${badgeClass}">${status.label}</span></td>
         <td>
@@ -734,7 +734,7 @@ function renderSalesHistoryTable() {
         <td>${doctor ? doctor.name : 'OTC Self-Medication'}</td>
         <td style="max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${itemsSummary}">${itemsSummary}</td>
         <td><span class="badge-status badge-info">${s.paymentMethod}</span></td>
-        <td><strong>$${s.totalAmount.toFixed(2)}</strong></td>
+        <td><strong>₹${s.totalAmount.toFixed(2)}</strong></td>
         <td><button class="btn btn-outline btn-sm" onclick="showInvoiceDetails(${s.id})">Print Receipt</button></td>
       </tr>
     `;
@@ -934,7 +934,7 @@ function populateDropdownOptions() {
         const status = getBatchStatus(b);
         const isExpired = status.type === "expired";
         return `<option value="${b.id}" ${isExpired || b.stock === 0 ? 'disabled' : ''}>
-          ${med ? med.name : 'Unknown'} | Batch: ${b.batchNumber} | Stock: ${b.stock} | $${b.sellingPrice.toFixed(2)} ${isExpired ? '(EXPIRED)' : ''}
+          ${med ? med.name : 'Unknown'} | Batch: ${b.batchNumber} | Stock: ${b.stock} | ₹${b.sellingPrice.toFixed(2)} ${isExpired ? '(EXPIRED)' : ''}
         </option>`;
       }).join("");
   }
@@ -958,15 +958,15 @@ function updateSaleModalCalculations() {
   const stockAlertEl = document.getElementById("sale-stock-warning");
 
   if (!batch) {
-    priceEl.textContent = "$0.00";
-    subtotalEl.textContent = "$0.00";
+    priceEl.textContent = "₹0.00";
+    subtotalEl.textContent = "₹0.00";
     stockAlertEl.textContent = "";
     return;
   }
 
-  priceEl.textContent = `$${batch.sellingPrice.toFixed(2)}`;
+  priceEl.textContent = `₹${batch.sellingPrice.toFixed(2)}`;
   const total = batch.sellingPrice * qty;
-  subtotalEl.textContent = `$${total.toFixed(2)}`;
+  subtotalEl.textContent = `₹${total.toFixed(2)}`;
 
   if (qty > batch.stock) {
     stockAlertEl.textContent = `⚠️ Error: Requested quantity (${qty}) exceeds available stock (${batch.stock})!`;
@@ -1117,7 +1117,7 @@ function openViewMedicineModal(medId) {
             <td><span class="font-mono">${b.batchNumber}</span></td>
             <td>${b.expiryDate}</td>
             <td><strong>${b.stock}</strong> units</td>
-            <td>$${b.sellingPrice.toFixed(2)}</td>
+            <td>₹${b.sellingPrice.toFixed(2)}</td>
             <td><span class="badge-status ${badgeClass}">${status.label}</span></td>
           </tr>
         `;
@@ -1353,9 +1353,9 @@ function showInvoiceDetails(saleId) {
     `Payment: ${sale.paymentMethod}\n` +
     `----------------------------------------\n` +
     `Items Dispensed:\n` +
-    sale.items.map(i => `  • ${i.medicineName} x ${i.qty} = $${i.subtotal.toFixed(2)}`).join("\n") + "\n" +
+    sale.items.map(i => `  • ${i.medicineName} x ${i.qty} = ₹${i.subtotal.toFixed(2)}`).join("\n") + "\n" +
     `----------------------------------------\n` +
-    `TOTAL AMOUNT: $${sale.totalAmount.toFixed(2)}\n` +
+    `TOTAL AMOUNT: ₹${sale.totalAmount.toFixed(2)}\n` +
     `========================================\n` +
     `Thank you for choosing PharmaCare Rx!`
   );

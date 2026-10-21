@@ -417,8 +417,8 @@
                       <th>Medicine Name</th>
                       <th>Expiry Date</th>
                       <th>Days to Expiry</th>
-                      <th>Cost Price</th>
-                      <th>Selling Price</th>
+                      <th>Cost Price (₹)</th>
+                      <th>Selling Price (₹)</th>
                       <th>Stock Quantity</th>
                       <th>Quality Status</th>
                       <th>Actions</th>
@@ -503,7 +503,7 @@
                       <th>Prescribing Doctor</th>
                       <th>Items Dispensed</th>
                       <th>Payment</th>
-                      <th>Total Amount</th>
+                      <th>Total Amount (₹)</th>
                       <th>Receipt</th>
                     </tr>
                   </thead>
@@ -733,12 +733,12 @@
               <div class="field-error" id="err-new-batch-expiry">Valid expiry date is required.</div>
             </div>
             <div class="form-group">
-              <label for="new-batch-purchase">Purchase Unit Price ($) *</label>
+              <label for="new-batch-purchase">Purchase Unit Price (₹) *</label>
               <input type="number" step="0.01" min="0" id="new-batch-purchase" placeholder="4.50" value="4.50">
               <div class="field-error" id="err-new-batch-purchase">Purchase price cannot be negative.</div>
             </div>
             <div class="form-group">
-              <label for="new-batch-selling">Selling Unit Price ($) *</label>
+              <label for="new-batch-selling">Selling Unit Price (₹) *</label>
               <input type="number" step="0.01" min="0.01" id="new-batch-selling" placeholder="7.00" value="7.00">
               <div class="field-error" id="err-new-batch-selling">Selling price must be greater than 0.</div>
             </div>
@@ -811,11 +811,11 @@
             <div style="background-color:#f8fafc; border:1px solid var(--border); border-radius:var(--radius-md); padding:16px; margin-top:8px;">
               <div style="display:flex; justify-content:space-between; margin-bottom:6px; font-size:0.85rem;">
                 <span style="color:var(--text-muted);">Unit Price:</span>
-                <span id="sale-unit-price-display" style="font-weight:600;">$0.00</span>
+                <span id="sale-unit-price-display" style="font-weight:600;">₹0.00</span>
               </div>
               <div style="display:flex; justify-content:space-between; font-size:1.05rem; font-weight:800; border-top:1px dashed var(--border); padding-top:8px;">
                 <span>Total Amount:</span>
-                <span id="sale-subtotal-display" style="color:var(--primary);">$0.00</span>
+                <span id="sale-subtotal-display" style="color:var(--primary);">₹0.00</span>
               </div>
             </div>
 
@@ -880,7 +880,7 @@
                 <th>Batch #</th>
                 <th>Expiry</th>
                 <th>Stock</th>
-                <th>Selling Price</th>
+                <th>Selling Price (₹)</th>
                 <th>Status</th>
               </tr>
             </thead>
@@ -977,7 +977,7 @@
               <input type="date" id="edit-batch-expiry" required>
             </div>
             <div class="form-group">
-              <label for="edit-batch-selling">Selling Price ($) *</label>
+              <label for="edit-batch-selling">Selling Price (₹) *</label>
               <input type="number" step="0.01" min="0.01" id="edit-batch-selling" required>
               <div class="field-error" id="err-edit-batch-price">Selling price must be greater than 0.</div>
             </div>
