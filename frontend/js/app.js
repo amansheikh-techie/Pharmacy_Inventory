@@ -1,13 +1,14 @@
 /**
  * PharmaCare Clinical Inventory & Prescription Management System
- * Vanilla JavaScript Frontend Logic & Clinical Mock Data Store
+ * Phase 2B: Full Frontend Interactivity with In-Memory Mock Store
+ * (All interactions are functional without requiring backend/MySQL in this phase)
  */
 
 // =====================================================================
-// 1. Initial Mock Clinical Database State (Matches 9-Table Schema)
+// 1. Initial In-Memory Clinical Mock Database
 // =====================================================================
 
-const MockDB = {
+const INITIAL_MOCK_DATA = {
   categories: [
     { id: 1, name: "Antibiotics", description: "Bacterial infection treatments" },
     { id: 2, name: "Pain Relief & Analgesics", description: "Pain and fever reducers" },
@@ -112,7 +113,7 @@ const MockDB = {
       invoiceNumber: "INV-2026-1049",
       date: "2026-10-20 16:45",
       patientId: 202,
-      doctorId: null, // OTC Walk-in
+      doctorId: null,
       prescriptionId: null,
       paymentMethod: "Cash",
       totalAmount: 17.50,
@@ -123,18 +124,22 @@ const MockDB = {
   ]
 };
 
+// Active Working Copy (Deep cloned from initial data)
+let MockDB = JSON.parse(JSON.stringify(INITIAL_MOCK_DATA));
+
 // =====================================================================
-// 2. Helper Utilities & Calculation Functions
+// 2. Clinical Calculation Utilities
 // =====================================================================
 
-// Returns days difference between current date and target date
+// Returns days until batch expiry
 function getDaysUntil(dateString) {
-  const today = new Date("2026-10-21"); // Synchronized with system date
+  const today = new Date("2026-10-21"); // Current system reference date
   const target = new Date(dateString);
   const diffTime = target - today;
   return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 }
 
+// Determines batch clinical quality status
 function getBatchStatus(batch) {
   const days = getDaysUntil(batch.expiryDate);
   if (days < 0) return { label: "EXPIRED", type: "expired", days };
@@ -143,6 +148,7 @@ function getBatchStatus(batch) {
   return { label: "Valid", type: "in-stock", days };
 }
 
+// Aggregates total stock units across all batches of a medicine
 function getMedicineTotalStock(medicineId) {
   return MockDB.batches
     .filter(b => b.medicineId === medicineId)
@@ -150,15 +156,17 @@ function getMedicineTotalStock(medicineId) {
 }
 
 // =====================================================================
-// 3. Application Initialization & Navigation
+// 3. Application Lifecycle & Event Binding
 // =====================================================================
 
 document.addEventListener("DOMContentLoaded", () => {
   initNavigation();
-  initModals();
+  initSearchAndFilters();
+  initModalsAndForms();
   refreshAllViews();
 });
 
+// Sidebar Navigation
 function initNavigation() {
   const navItems = document.querySelectorAll(".nav-item");
   navItems.forEach(item => {
@@ -179,18 +187,100 @@ function initNavigation() {
     });
   });
 
-  // Global search handler
+  // Global header search input
   const globalSearch = document.getElementById("global-search-input");
   if (globalSearch) {
     globalSearch.addEventListener("input", (e) => {
       const q = e.target.value.toLowerCase().trim();
-      filterGlobalSearch(q);
+      // If user is on dashboard or medicines, filter medicines
+      const medSearchInput = document.getElementById("medicine-search-input");
+      if (medSearchInput) {
+        medSearchInput.value = q;
+        renderMedicinesTable();
+      }
+      const batchSearchInput = document.getElementById("batch-search-input");
+      if (batchSearchInput) {
+        batchSearchInput.value = q;
+        renderBatchesTable();
+      }
+    });
+  }
+
+  // Reset sample data button
+  const resetBtn = document.getElementById("btn-reset-demo-data");
+  if (resetBtn) {
+    resetBtn.addEventListener("click", () => {
+      if (confirm("Reset all temporary frontend data back to original state?")) {
+        MockDB = JSON.parse(JSON.stringify(INITIAL_MOCK_DATA));
+        refreshAllViews();
+        showToast("Sample data reset to default clinical values.", "info");
+      }
+    });
+  }
+}
+
+// Search and Filter Listeners
+function initSearchAndFilters() {
+  // Medicines view search & category filter
+  const medSearch = document.getElementById("medicine-search-input");
+  const medCat = document.getElementById("medicine-category-filter");
+  const medClear = document.getElementById("btn-clear-medicine-filters");
+
+  if (medSearch) medSearch.addEventListener("input", () => renderMedicinesTable());
+  if (medCat) medCat.addEventListener("change", () => renderMedicinesTable());
+  if (medClear) {
+    medClear.addEventListener("click", () => {
+      if (medSearch) medSearch.value = "";
+      if (medCat) medCat.value = "";
+      renderMedicinesTable();
+    });
+  }
+
+  // Batches view search & status filter
+  const batchSearch = document.getElementById("batch-search-input");
+  const batchStatus = document.getElementById("batch-status-filter");
+  const batchClear = document.getElementById("btn-clear-batch-filters");
+
+  if (batchSearch) batchSearch.addEventListener("input", () => renderBatchesTable());
+  if (batchStatus) batchStatus.addEventListener("change", () => renderBatchesTable());
+  if (batchClear) {
+    batchClear.addEventListener("click", () => {
+      if (batchSearch) batchSearch.value = "";
+      if (batchStatus) batchStatus.value = "";
+      renderBatchesTable();
+    });
+  }
+
+  // Prescriptions view search & status filter
+  const rxSearch = document.getElementById("rx-search-input");
+  const rxStatus = document.getElementById("rx-status-filter");
+  const rxClear = document.getElementById("btn-clear-rx-filters");
+
+  if (rxSearch) rxSearch.addEventListener("input", () => renderPrescriptionsView());
+  if (rxStatus) rxStatus.addEventListener("change", () => renderPrescriptionsView());
+  if (rxClear) {
+    rxClear.addEventListener("click", () => {
+      if (rxSearch) rxSearch.value = "";
+      if (rxStatus) rxStatus.value = "";
+      renderPrescriptionsView();
+    });
+  }
+
+  // Sales view search filter
+  const saleSearch = document.getElementById("sale-search-input");
+  const saleClear = document.getElementById("btn-clear-sale-filters");
+
+  if (saleSearch) saleSearch.addEventListener("input", () => renderSalesHistoryTable());
+  if (saleClear) {
+    saleClear.addEventListener("click", () => {
+      if (saleSearch) saleSearch.value = "";
+      renderSalesHistoryTable();
     });
   }
 }
 
 // =====================================================================
-// 4. View Rendering Functions
+// 4. View Rendering & Dynamic Updates
 // =====================================================================
 
 function refreshAllViews() {
@@ -202,11 +292,13 @@ function refreshAllViews() {
   renderBatchesTable();
   renderPrescriptionsView();
   renderSalesHistoryTable();
+  renderPatientsTable();
+  renderDoctorsTable();
   renderReportsView();
   populateDropdownOptions();
 }
 
-// Dashboard Stat Cards
+// Dashboard Statistics (Recalculates from active MockDB state)
 function renderDashboardStats() {
   const totalMeds = MockDB.medicines.length;
   const totalStock = MockDB.batches.reduce((sum, b) => sum + b.stock, 0);
@@ -214,12 +306,17 @@ function renderDashboardStats() {
   const lowStockBatches = MockDB.batches.filter(b => b.stock <= b.reorderLevel && getDaysUntil(b.expiryDate) >= 0);
   const expiringBatches = MockDB.batches.filter(b => getDaysUntil(b.expiryDate) <= 30);
 
-  document.getElementById("stat-total-medicines").textContent = totalMeds;
-  document.getElementById("stat-total-stock").textContent = totalStock.toLocaleString();
-  document.getElementById("stat-low-stock").textContent = lowStockBatches.length;
-  document.getElementById("stat-expiring").textContent = expiringBatches.length;
+  const elMeds = document.getElementById("stat-total-medicines");
+  const elStock = document.getElementById("stat-total-stock");
+  const elLow = document.getElementById("stat-low-stock");
+  const elExp = document.getElementById("stat-expiring");
 
-  // Sidebar badge for critical items
+  if (elMeds) elMeds.textContent = totalMeds;
+  if (elStock) elStock.textContent = totalStock.toLocaleString();
+  if (elLow) elLow.textContent = lowStockBatches.length;
+  if (elExp) elExp.textContent = expiringBatches.length;
+
+  // Sidebar badge for critical alerts
   const sidebarAlertBadge = document.getElementById("sidebar-alert-badge");
   if (sidebarAlertBadge) {
     const totalAlerts = lowStockBatches.length + expiringBatches.length;
@@ -228,7 +325,7 @@ function renderDashboardStats() {
   }
 }
 
-// Critical Alerts Table on Dashboard
+// Dashboard Critical Alerts Table
 function renderCriticalAlerts() {
   const container = document.getElementById("dashboard-alerts-tbody");
   if (!container) return;
@@ -239,7 +336,7 @@ function renderCriticalAlerts() {
   });
 
   if (urgentBatches.length === 0) {
-    container.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:20px; color:var(--text-muted);">No urgent expiry or stock warnings. All batches optimal.</td></tr>`;
+    container.innerHTML = `<tr><td colspan="5" class="empty-table-state"><div class="empty-table-title">No Urgent Warnings</div><div class="empty-table-sub">All medication batches currently have optimal stock and valid expiry.</div></td></tr>`;
     return;
   }
 
@@ -263,10 +360,15 @@ function renderCriticalAlerts() {
   }).join("");
 }
 
-// Recent Sales on Dashboard
+// Dashboard Recent Sales Table
 function renderRecentSales() {
   const container = document.getElementById("dashboard-sales-tbody");
   if (!container) return;
+
+  if (MockDB.sales.length === 0) {
+    container.innerHTML = `<tr><td colspan="5" class="empty-table-state"><div class="empty-table-title">No Sales Recorded Yet</div><div class="empty-table-sub">Use 'New Dispense / Sale' to record a transaction.</div></td></tr>`;
+    return;
+  }
 
   container.innerHTML = MockDB.sales.slice(-5).reverse().map(sale => {
     const patient = MockDB.patients.find(p => p.id === sale.patientId);
@@ -274,7 +376,7 @@ function renderRecentSales() {
       <tr>
         <td><span class="font-mono">${sale.invoiceNumber}</span></td>
         <td>${patient ? patient.name : 'Walk-in Customer'}</td>
-        <td>${sale.items.length} items</td>
+        <td>${sale.items.length} item(s)</td>
         <td><strong>$${sale.totalAmount.toFixed(2)}</strong></td>
         <td><span class="badge-status badge-info">${sale.paymentMethod}</span></td>
       </tr>
@@ -282,7 +384,7 @@ function renderRecentSales() {
   }).join("");
 }
 
-// Low Stock List with Progress Bar on Dashboard
+// Dashboard Low Stock List with Progress Bars
 function renderLowStockAlertList() {
   const container = document.getElementById("dashboard-lowstock-list");
   if (!container) return;
@@ -290,13 +392,14 @@ function renderLowStockAlertList() {
   const lowStock = MockDB.batches.filter(b => b.stock <= b.reorderLevel);
 
   if (lowStock.length === 0) {
-    container.innerHTML = `<div style="padding:20px; text-align:center; color:var(--text-muted);">Inventory levels healthy. No low stock alerts.</div>`;
+    container.innerHTML = `<div class="empty-table-state"><div class="empty-table-title">Stock Levels Safe</div><div class="empty-table-sub">No medicine batches are currently below their reorder threshold.</div></div>`;
     return;
   }
 
   container.innerHTML = lowStock.map(b => {
     const med = MockDB.medicines.find(m => m.id === b.medicineId);
-    const pct = Math.min(100, Math.round((b.stock / (b.reorderLevel * 2)) * 100));
+    const maxReference = Math.max(b.reorderLevel * 2, 1);
+    const pct = Math.min(100, Math.round((b.stock / maxReference) * 100));
     const fillClass = b.stock === 0 ? "fill-danger" : "fill-warning";
 
     return `
@@ -314,18 +417,50 @@ function renderLowStockAlertList() {
             </div>
           </div>
         </div>
-        <button class="btn btn-outline btn-sm" onclick="openRestockModal(${b.id})">Restock</button>
+        <button class="btn btn-outline btn-sm" onclick="quickRestockBatch(${b.id})">Restock +50</button>
       </div>
     `;
   }).join("");
 }
 
-// Medicines Master Table View
+// Medicines Master Table with Search & Category Filter
 function renderMedicinesTable() {
   const tbody = document.getElementById("medicines-table-tbody");
   if (!tbody) return;
 
-  tbody.innerHTML = MockDB.medicines.map(med => {
+  const searchInput = document.getElementById("medicine-search-input");
+  const categoryFilter = document.getElementById("medicine-category-filter");
+  const countDisplay = document.getElementById("medicine-count-display");
+
+  const query = searchInput ? searchInput.value.toLowerCase().trim() : "";
+  const selectedCat = categoryFilter ? categoryFilter.value : "";
+
+  let filtered = MockDB.medicines.filter(med => {
+    const matchesSearch = query === "" || 
+      med.name.toLowerCase().includes(query) || 
+      med.generic.toLowerCase().includes(query);
+    const matchesCat = selectedCat === "" || med.categoryId.toString() === selectedCat;
+    return matchesSearch && matchesCat;
+  });
+
+  if (countDisplay) {
+    countDisplay.textContent = `Showing ${filtered.length} of ${MockDB.medicines.length} medicines`;
+  }
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="8" class="empty-table-state">
+          <svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          <div class="empty-table-title">No matching medicines found</div>
+          <div class="empty-table-sub">Try searching with a different keyword or select 'All Categories'.</div>
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(med => {
     const cat = MockDB.categories.find(c => c.id === med.categoryId);
     const totalStock = getMedicineTotalStock(med.id);
     const medBatches = MockDB.batches.filter(b => b.medicineId === med.id);
@@ -350,24 +485,75 @@ function renderMedicinesTable() {
         <td>${medBatches.length} batch(es)</td>
         <td>${statusBadge}</td>
         <td>
-          <button class="btn btn-outline btn-sm" onclick="switchView('batches', ${med.id})">View Batches</button>
+          <div class="action-btn-group">
+            <button class="btn btn-outline btn-sm" onclick="openViewMedicineModal(${med.id})" title="View Details">
+              View
+            </button>
+            <button class="btn btn-outline btn-sm" onclick="openEditMedicineModal(${med.id})" title="Edit Medicine">
+              Edit
+            </button>
+            <button class="btn btn-primary btn-sm" onclick="switchView('batches', ${med.id})" title="View Batches">
+              Batches
+            </button>
+          </div>
         </td>
       </tr>
     `;
   }).join("");
 }
 
-// Batches & Inventory View
+// Inventory & Batches Table with Search & Status Filter
 function renderBatchesTable(filterMedicineId = null) {
   const tbody = document.getElementById("batches-table-tbody");
   if (!tbody) return;
+
+  const searchInput = document.getElementById("batch-search-input");
+  const statusFilter = document.getElementById("batch-status-filter");
+  const countDisplay = document.getElementById("batch-count-display");
+
+  const query = searchInput ? searchInput.value.toLowerCase().trim() : "";
+  const selectedStatus = statusFilter ? statusFilter.value : "";
 
   let batches = MockDB.batches;
   if (filterMedicineId) {
     batches = batches.filter(b => b.medicineId === filterMedicineId);
   }
 
-  tbody.innerHTML = batches.map(b => {
+  let filtered = batches.filter(b => {
+    const med = MockDB.medicines.find(m => m.id === b.medicineId);
+    const medName = med ? med.name.toLowerCase() : "";
+    const matchesSearch = query === "" || 
+      b.batchNumber.toLowerCase().includes(query) || 
+      medName.includes(query);
+
+    const status = getBatchStatus(b);
+    let matchesStatus = true;
+    if (selectedStatus === "in-stock") matchesStatus = status.type === "in-stock";
+    else if (selectedStatus === "low-stock") matchesStatus = b.stock <= b.reorderLevel;
+    else if (selectedStatus === "warning") matchesStatus = status.type === "warning";
+    else if (selectedStatus === "expired") matchesStatus = status.type === "expired";
+
+    return matchesSearch && matchesStatus;
+  });
+
+  if (countDisplay) {
+    countDisplay.textContent = `Showing ${filtered.length} of ${MockDB.batches.length} batches`;
+  }
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="9" class="empty-table-state">
+          <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="9" y1="9" x2="15" y2="15"></line><line x1="15" y1="9" x2="9" y2="15"></line></svg>
+          <div class="empty-table-title">No batches found</div>
+          <div class="empty-table-sub">Try searching with a different batch number or clear the status filter.</div>
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(b => {
     const med = MockDB.medicines.find(m => m.id === b.medicineId);
     const status = getBatchStatus(b);
 
@@ -383,7 +569,7 @@ function renderBatchesTable(filterMedicineId = null) {
         <td>${b.expiryDate}</td>
         <td>
           <span style="font-weight:600; color:${status.days < 0 ? 'var(--danger)' : status.days <= 30 ? 'var(--warning)' : 'inherit'};">
-            ${status.days < 0 ? `Expired ${Math.abs(status.days)} days ago` : `${status.days} days remaining`}
+            ${status.days < 0 ? `Expired ${Math.abs(status.days)}d ago` : `${status.days}d remaining`}
           </span>
         </td>
         <td>$${b.purchasePrice.toFixed(2)}</td>
@@ -391,21 +577,63 @@ function renderBatchesTable(filterMedicineId = null) {
         <td><strong>${b.stock}</strong> <span style="font-size:0.75rem; color:var(--text-muted);">(Min ${b.reorderLevel})</span></td>
         <td><span class="badge-status ${badgeClass}">${status.label}</span></td>
         <td>
-          <button class="btn btn-primary btn-sm" onclick="prepareSaleFromBatch(${b.id})" ${status.type === 'expired' || b.stock === 0 ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''}>
-            Dispense
-          </button>
+          <div class="action-btn-group">
+            <button class="btn btn-outline btn-sm" onclick="openEditBatchModal(${b.id})" title="Edit Stock / Price">
+              Edit
+            </button>
+            <button class="btn btn-primary btn-sm" onclick="prepareSaleFromBatch(${b.id})" ${status.type === 'expired' || b.stock === 0 ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''} title="Dispense Medication">
+              Dispense
+            </button>
+          </div>
         </td>
       </tr>
     `;
   }).join("");
 }
 
-// Prescriptions View
+// Prescriptions View with Search & Status Filter
 function renderPrescriptionsView() {
   const container = document.getElementById("prescriptions-cards-container");
   if (!container) return;
 
-  container.innerHTML = MockDB.prescriptions.map(rx => {
+  const searchInput = document.getElementById("rx-search-input");
+  const statusFilter = document.getElementById("rx-status-filter");
+
+  const query = searchInput ? searchInput.value.toLowerCase().trim() : "";
+  const selectedStatus = statusFilter ? statusFilter.value : "";
+
+  let filtered = MockDB.prescriptions.filter(rx => {
+    const patient = MockDB.patients.find(p => p.id === rx.patientId);
+    const doctor = MockDB.doctors.find(d => d.id === rx.doctorId);
+    const patientName = patient ? patient.name.toLowerCase() : "";
+    const doctorName = doctor ? doctor.name.toLowerCase() : "";
+    const diag = rx.diagnosis.toLowerCase();
+    const rxNum = rx.rxNumber.toLowerCase();
+
+    const matchesSearch = query === "" || 
+      patientName.includes(query) || 
+      doctorName.includes(query) || 
+      diag.includes(query) ||
+      rxNum.includes(query);
+
+    const matchesStatus = selectedStatus === "" || rx.status === selectedStatus;
+    return matchesSearch && matchesStatus;
+  });
+
+  if (filtered.length === 0) {
+    container.innerHTML = `
+      <div class="content-card">
+        <div class="empty-table-state">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path></svg>
+          <div class="empty-table-title">No prescriptions found</div>
+          <div class="empty-table-sub">Try searching for a different patient, physician, or status.</div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = filtered.map(rx => {
     const patient = MockDB.patients.find(p => p.id === rx.patientId);
     const doctor = MockDB.doctors.find(d => d.id === rx.doctorId);
 
@@ -428,9 +656,9 @@ function renderPrescriptionsView() {
           <span class="badge-status ${rx.status === 'Fulfilled' ? 'badge-in-stock' : 'badge-low-stock'}">${rx.status}</span>
         </div>
         <div style="padding: 16px 20px;">
-          <div style="display:flex; justify-content:space-between; margin-bottom: 12px; font-size:0.85rem;">
+          <div style="display:flex; justify-content:space-between; margin-bottom: 12px; font-size:0.85rem; flex-wrap:wrap; gap:8px;">
             <div><strong>Patient:</strong> ${patient ? patient.name : 'Unknown'} (${patient ? patient.age : '-'}y, ${patient ? patient.gender : '-'})</div>
-            <div><strong>Doctor:</strong> ${doctor ? doctor.name : 'Unknown'}</div>
+            <div><strong>Doctor:</strong> ${doctor ? doctor.name : 'Unknown'} (${doctor ? doctor.specialization : ''})</div>
             <div><strong>Date:</strong> ${rx.date}</div>
           </div>
           <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom: 12px;"><strong>Diagnosis:</strong> ${rx.diagnosis}</p>
@@ -455,15 +683,47 @@ function renderPrescriptionsView() {
   }).join("");
 }
 
-// Sales History Table
+// Sales History Table with Search
 function renderSalesHistoryTable() {
   const tbody = document.getElementById("sales-table-tbody");
   if (!tbody) return;
 
-  tbody.innerHTML = MockDB.sales.map(s => {
+  const searchInput = document.getElementById("sale-search-input");
+  const countDisplay = document.getElementById("sales-count-display");
+  const query = searchInput ? searchInput.value.toLowerCase().trim() : "";
+
+  let filtered = MockDB.sales.filter(s => {
+    const patient = MockDB.patients.find(p => p.id === s.patientId);
+    const patientName = patient ? patient.name.toLowerCase() : "walk-in";
+    const inv = s.invoiceNumber.toLowerCase();
+    const pay = s.paymentMethod.toLowerCase();
+
+    return query === "" || 
+      inv.includes(query) || 
+      patientName.includes(query) || 
+      pay.includes(query);
+  });
+
+  if (countDisplay) {
+    countDisplay.textContent = `Showing ${filtered.length} of ${MockDB.sales.length} sales`;
+  }
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="8" class="empty-table-state">
+          <svg viewBox="0 0 24 24" fill="none"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle></svg>
+          <div class="empty-table-title">No sales records found</div>
+          <div class="empty-table-sub">Try searching with a different invoice number or patient name.</div>
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(s => {
     const patient = MockDB.patients.find(p => p.id === s.patientId);
     const doctor = MockDB.doctors.find(d => d.id === s.doctorId);
-
     const itemsSummary = s.items.map(i => `${i.medicineName} (${i.qty})`).join(", ");
 
     return `
@@ -475,56 +735,96 @@ function renderSalesHistoryTable() {
         <td style="max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${itemsSummary}">${itemsSummary}</td>
         <td><span class="badge-status badge-info">${s.paymentMethod}</span></td>
         <td><strong>$${s.totalAmount.toFixed(2)}</strong></td>
-        <td><button class="btn btn-outline btn-sm" onclick="showInvoiceDetails(${s.id})">Print Slip</button></td>
+        <td><button class="btn btn-outline btn-sm" onclick="showInvoiceDetails(${s.id})">Print Receipt</button></td>
       </tr>
     `;
   }).join("");
 }
 
-// Reports & Procedures Simulation View
+// Patients Table
+function renderPatientsTable() {
+  const tbody = document.getElementById("patients-table-tbody");
+  if (!tbody) return;
+
+  tbody.innerHTML = MockDB.patients.map(p => `
+    <tr>
+      <td><span class="font-mono">#PAT-${p.id}</span></td>
+      <td><strong>${p.name}</strong></td>
+      <td>${p.phone}</td>
+      <td>${p.age} yrs, ${p.gender}</td>
+      <td>${p.history}</td>
+    </tr>
+  `).join("");
+}
+
+// Doctors Table
+function renderDoctorsTable() {
+  const tbody = document.getElementById("doctors-table-tbody");
+  if (!tbody) return;
+
+  tbody.innerHTML = MockDB.doctors.map(d => `
+    <tr>
+      <td><span class="font-mono">#DOC-${d.id}</span></td>
+      <td><strong>${d.name}</strong></td>
+      <td>${d.specialization}</td>
+      <td><span class="font-mono">${d.license}</span></td>
+      <td>${d.phone}</td>
+    </tr>
+  `).join("");
+}
+
+// Stored Procedures Simulation Reports
 function renderReportsView() {
   const lowStockTable = document.getElementById("report-lowstock-tbody");
   const expiryTable = document.getElementById("report-expiry-tbody");
 
   if (lowStockTable) {
     const lowStock = MockDB.batches.filter(b => b.stock <= b.reorderLevel);
-    lowStockTable.innerHTML = lowStock.map(b => {
-      const med = MockDB.medicines.find(m => m.id === b.medicineId);
-      return `
-        <tr>
-          <td>${med ? med.name : 'Unknown'}</td>
-          <td><span class="font-mono">${b.batchNumber}</span></td>
-          <td><strong>${b.stock}</strong></td>
-          <td>${b.reorderLevel}</td>
-          <td><span class="badge-status badge-critical">Below Minimum</span></td>
-        </tr>
-      `;
-    }).join("");
+    if (lowStock.length === 0) {
+      lowStockTable.innerHTML = `<tr><td colspan="5" class="empty-table-state"><div class="empty-table-title">No Low Stock Items</div></td></tr>`;
+    } else {
+      lowStockTable.innerHTML = lowStock.map(b => {
+        const med = MockDB.medicines.find(m => m.id === b.medicineId);
+        return `
+          <tr>
+            <td>${med ? med.name : 'Unknown'}</td>
+            <td><span class="font-mono">${b.batchNumber}</span></td>
+            <td><strong>${b.stock} units</strong></td>
+            <td>${b.reorderLevel} units</td>
+            <td><span class="badge-status badge-critical">Below Minimum</span></td>
+          </tr>
+        `;
+      }).join("");
+    }
   }
 
   if (expiryTable) {
     const expiringBatches = MockDB.batches.filter(b => getDaysUntil(b.expiryDate) <= 60);
-    expiryTable.innerHTML = expiringBatches.map(b => {
-      const med = MockDB.medicines.find(m => m.id === b.medicineId);
-      const days = getDaysUntil(b.expiryDate);
-      return `
-        <tr>
-          <td>${med ? med.name : 'Unknown'}</td>
-          <td><span class="font-mono">${b.batchNumber}</span></td>
-          <td>${b.expiryDate}</td>
-          <td>${b.stock} units</td>
-          <td><span class="badge-status ${days < 0 ? 'badge-expired' : 'badge-low-stock'}">${days < 0 ? 'EXPIRED' : `${days} days left`}</span></td>
-        </tr>
-      `;
-    }).join("");
+    if (expiringBatches.length === 0) {
+      expiryTable.innerHTML = `<tr><td colspan="5" class="empty-table-state"><div class="empty-table-title">No Batches Expiring in Next 60 Days</div></td></tr>`;
+    } else {
+      expiryTable.innerHTML = expiringBatches.map(b => {
+        const med = MockDB.medicines.find(m => m.id === b.medicineId);
+        const days = getDaysUntil(b.expiryDate);
+        return `
+          <tr>
+            <td>${med ? med.name : 'Unknown'}</td>
+            <td><span class="font-mono">${b.batchNumber}</span></td>
+            <td>${b.expiryDate}</td>
+            <td>${b.stock} units</td>
+            <td><span class="badge-status ${days < 0 ? 'badge-expired' : 'badge-low-stock'}">${days < 0 ? 'EXPIRED' : `${days}d left`}</span></td>
+          </tr>
+        `;
+      }).join("");
+    }
   }
 }
 
 // =====================================================================
-// 5. Interactive Modals & Forms
+// 5. Modals, Forms & Client-Side Validation
 // =====================================================================
 
-function initModals() {
+function initModalsAndForms() {
   // Modal openers
   document.getElementById("btn-add-medicine-top")?.addEventListener("click", () => openModal("modal-add-medicine"));
   document.getElementById("btn-add-medicine-strip")?.addEventListener("click", () => openModal("modal-add-medicine"));
@@ -538,7 +838,7 @@ function initModals() {
     });
   });
 
-  // Add Medicine Form Submission
+  // Modal 1: Add Medicine Form
   const formAddMed = document.getElementById("form-add-medicine");
   if (formAddMed) {
     formAddMed.addEventListener("submit", (e) => {
@@ -547,7 +847,7 @@ function initModals() {
     });
   }
 
-  // Record Sale Form Submission
+  // Modal 2: Record Sale Form
   const formSale = document.getElementById("form-record-sale");
   if (formSale) {
     formSale.addEventListener("submit", (e) => {
@@ -556,12 +856,40 @@ function initModals() {
     });
   }
 
-  // Dynamic price calculation on sale modal batch selection
+  // Modal 4: Edit Medicine Form
+  const formEditMed = document.getElementById("form-edit-medicine");
+  if (formEditMed) {
+    formEditMed.addEventListener("submit", (e) => {
+      e.preventDefault();
+      saveEditedMedicine();
+    });
+  }
+
+  // Modal 5: Edit Batch Form
+  const formEditBatch = document.getElementById("form-edit-batch");
+  if (formEditBatch) {
+    formEditBatch.addEventListener("submit", (e) => {
+      e.preventDefault();
+      saveEditedBatch();
+    });
+  }
+
+  // Sale Modal Dynamic Price Calculation
   const saleBatchSelect = document.getElementById("sale-batch-select");
   const saleQtyInput = document.getElementById("sale-quantity-input");
   if (saleBatchSelect && saleQtyInput) {
     saleBatchSelect.addEventListener("change", updateSaleModalCalculations);
     saleQtyInput.addEventListener("input", updateSaleModalCalculations);
+  }
+
+  // View modal "Edit Formulation" button shortcut
+  const btnViewMedEdit = document.getElementById("btn-view-med-edit");
+  if (btnViewMedEdit) {
+    btnViewMedEdit.addEventListener("click", () => {
+      const currentMedId = btnViewMedEdit.getAttribute("data-medicine-id");
+      closeModal("modal-view-medicine");
+      if (currentMedId) openEditMedicineModal(parseInt(currentMedId));
+    });
   }
 }
 
@@ -580,6 +908,21 @@ function populateDropdownOptions() {
   const catSelect = document.getElementById("new-med-category");
   if (catSelect) {
     catSelect.innerHTML = MockDB.categories.map(c => `<option value="${c.id}">${c.name}</option>`).join("");
+  }
+
+  // Category filter dropdown in Medicines View
+  const catFilter = document.getElementById("medicine-category-filter");
+  if (catFilter) {
+    const currentVal = catFilter.value;
+    catFilter.innerHTML = `<option value="">All Categories</option>` +
+      MockDB.categories.map(c => `<option value="${c.id}">${c.name}</option>`).join("");
+    catFilter.value = currentVal;
+  }
+
+  // Category dropdown in Edit Medicine Modal
+  const editCatSelect = document.getElementById("edit-med-category");
+  if (editCatSelect) {
+    editCatSelect.innerHTML = MockDB.categories.map(c => `<option value="${c.id}">${c.name}</option>`).join("");
   }
 
   // Batch dropdown in Record Sale
@@ -604,6 +947,7 @@ function populateDropdownOptions() {
   }
 }
 
+// Dynamic Bill Calculator in POS Modal
 function updateSaleModalCalculations() {
   const batchId = parseInt(document.getElementById("sale-batch-select").value);
   const qty = parseInt(document.getElementById("sale-quantity-input").value) || 0;
@@ -627,6 +971,9 @@ function updateSaleModalCalculations() {
   if (qty > batch.stock) {
     stockAlertEl.textContent = `⚠️ Error: Requested quantity (${qty}) exceeds available stock (${batch.stock})!`;
     stockAlertEl.style.color = "var(--danger)";
+  } else if (qty <= 0) {
+    stockAlertEl.textContent = `⚠️ Quantity must be at least 1 unit.`;
+    stockAlertEl.style.color = "var(--danger)";
   } else {
     stockAlertEl.textContent = `✓ Stock available: ${batch.stock} units in batch`;
     stockAlertEl.style.color = "var(--success)";
@@ -634,38 +981,87 @@ function updateSaleModalCalculations() {
 }
 
 // =====================================================================
-// 6. Action Handlers (Add Medicine, Record Sale, Dispense Rx)
+// 6. Action Handlers (Add, Edit, View, Sale, Restock)
 // =====================================================================
 
+// Action: Save New Medicine and Batch (With Client-Side Validation)
 function saveNewMedicineAndBatch() {
-  const name = document.getElementById("new-med-name").value.trim();
-  const generic = document.getElementById("new-med-generic").value.trim();
-  const categoryId = parseInt(document.getElementById("new-med-category").value);
-  const formType = document.getElementById("new-med-form").value;
-  const dosage = document.getElementById("new-med-dosage").value.trim();
+  const nameInput = document.getElementById("new-med-name");
+  const genericInput = document.getElementById("new-med-generic");
+  const catInput = document.getElementById("new-med-category");
+  const formInput = document.getElementById("new-med-form");
+  const dosageInput = document.getElementById("new-med-dosage");
 
-  const batchNumber = document.getElementById("new-batch-number").value.trim();
-  const expiryDate = document.getElementById("new-batch-expiry").value;
-  const purchasePrice = parseFloat(document.getElementById("new-batch-purchase").value);
-  const sellingPrice = parseFloat(document.getElementById("new-batch-selling").value);
-  const stock = parseInt(document.getElementById("new-batch-stock").value);
-  const reorderLevel = parseInt(document.getElementById("new-batch-reorder").value);
+  const batchNumInput = document.getElementById("new-batch-number");
+  const expiryInput = document.getElementById("new-batch-expiry");
+  const purchaseInput = document.getElementById("new-batch-purchase");
+  const sellingInput = document.getElementById("new-batch-selling");
+  const stockInput = document.getElementById("new-batch-stock");
+  const reorderInput = document.getElementById("new-batch-reorder");
 
-  if (!name || !batchNumber || !expiryDate || isNaN(stock)) {
-    showToast("Please fill all required clinical medicine and batch fields.", "error");
+  // Reset error displays
+  document.querySelectorAll(".field-error").forEach(el => el.classList.remove("active"));
+
+  let isValid = true;
+
+  const name = nameInput.value.trim();
+  if (!name) {
+    document.getElementById("err-new-med-name").classList.add("active");
+    isValid = false;
+  }
+
+  const batchNumber = batchNumInput.value.trim();
+  if (!batchNumber) {
+    document.getElementById("err-new-batch-number").classList.add("active");
+    isValid = false;
+  }
+
+  const expiryDate = expiryInput.value;
+  if (!expiryDate) {
+    document.getElementById("err-new-batch-expiry").classList.add("active");
+    isValid = false;
+  }
+
+  const purchasePrice = parseFloat(purchaseInput.value);
+  if (isNaN(purchasePrice) || purchasePrice < 0) {
+    document.getElementById("err-new-batch-purchase").classList.add("active");
+    isValid = false;
+  }
+
+  const sellingPrice = parseFloat(sellingInput.value);
+  if (isNaN(sellingPrice) || sellingPrice <= 0) {
+    document.getElementById("err-new-batch-selling").classList.add("active");
+    isValid = false;
+  }
+
+  const stock = parseInt(stockInput.value);
+  if (isNaN(stock) || stock < 0) {
+    document.getElementById("err-new-batch-stock").classList.add("active");
+    isValid = false;
+  }
+
+  const reorderLevel = parseInt(reorderInput.value);
+  if (isNaN(reorderLevel) || reorderLevel < 1) {
+    document.getElementById("err-new-batch-reorder").classList.add("active");
+    isValid = false;
+  }
+
+  if (!isValid) {
+    showToast("Please correct validation errors highlighted in the form.", "error");
     return;
   }
 
+  // Create new unique IDs
   const newMedId = 100 + MockDB.medicines.length + 1;
   const newBatchId = 500 + MockDB.batches.length + 1;
 
   MockDB.medicines.push({
     id: newMedId,
     name,
-    generic: generic || name,
-    categoryId,
-    form: formType,
-    dosage: dosage || "Standard"
+    generic: genericInput.value.trim() || name,
+    categoryId: parseInt(catInput.value),
+    form: formInput.value,
+    dosage: dosageInput.value.trim() || "Standard"
   });
 
   MockDB.batches.push({
@@ -673,48 +1069,221 @@ function saveNewMedicineAndBatch() {
     medicineId: newMedId,
     batchNumber,
     expiryDate,
-    purchasePrice: purchasePrice || 0,
-    sellingPrice: sellingPrice || 0,
+    purchasePrice,
+    sellingPrice,
     stock,
-    reorderLevel: reorderLevel || 10
+    reorderLevel
   });
 
   closeModal("modal-add-medicine");
   document.getElementById("form-add-medicine").reset();
   refreshAllViews();
-  showToast(`Medicine "${name}" and Batch #${batchNumber} added successfully!`, "success");
+  showToast(`Medicine "${name}" and Batch #${batchNumber} added successfully to inventory!`, "success");
 }
 
+// Action: View Medicine Formulation Details
+function openViewMedicineModal(medId) {
+  const med = MockDB.medicines.find(m => m.id === medId);
+  if (!med) return;
+
+  const cat = MockDB.categories.find(c => c.id === med.categoryId);
+  const totalStock = getMedicineTotalStock(med.id);
+  const batches = MockDB.batches.filter(b => b.medicineId === med.id);
+
+  document.getElementById("view-med-name").textContent = med.name;
+  document.getElementById("view-med-generic").textContent = med.generic;
+  document.getElementById("view-med-category").textContent = cat ? cat.name : "Uncategorized";
+  document.getElementById("view-med-form").textContent = `${med.form} (${med.dosage})`;
+  document.getElementById("view-med-stock").textContent = `${totalStock} units`;
+  document.getElementById("view-med-batches-count").textContent = `${batches.length} batch(es)`;
+
+  const editBtn = document.getElementById("btn-view-med-edit");
+  if (editBtn) editBtn.setAttribute("data-medicine-id", med.id);
+
+  const tbody = document.getElementById("view-med-batches-tbody");
+  if (tbody) {
+    if (batches.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding:16px;">No batches registered for this medicine.</td></tr>`;
+    } else {
+      tbody.innerHTML = batches.map(b => {
+        const status = getBatchStatus(b);
+        let badgeClass = "badge-in-stock";
+        if (status.type === "expired") badgeClass = "badge-expired";
+        else if (status.type === "warning") badgeClass = "badge-low-stock";
+        else if (status.type === "low-stock") badgeClass = "badge-critical";
+
+        return `
+          <tr>
+            <td><span class="font-mono">${b.batchNumber}</span></td>
+            <td>${b.expiryDate}</td>
+            <td><strong>${b.stock}</strong> units</td>
+            <td>$${b.sellingPrice.toFixed(2)}</td>
+            <td><span class="badge-status ${badgeClass}">${status.label}</span></td>
+          </tr>
+        `;
+      }).join("");
+    }
+  }
+
+  openModal("modal-view-medicine");
+}
+
+// Action: Open Edit Medicine Modal
+function openEditMedicineModal(medId) {
+  const med = MockDB.medicines.find(m => m.id === medId);
+  if (!med) return;
+
+  document.getElementById("edit-med-id").value = med.id;
+  document.getElementById("edit-med-name").value = med.name;
+  document.getElementById("edit-med-generic").value = med.generic;
+  document.getElementById("edit-med-category").value = med.categoryId;
+  document.getElementById("edit-med-form").value = med.form;
+  document.getElementById("edit-med-dosage").value = med.dosage;
+
+  document.querySelectorAll("#modal-edit-medicine .field-error").forEach(el => el.classList.remove("active"));
+  openModal("modal-edit-medicine");
+}
+
+// Action: Save Edited Medicine Formulation
+function saveEditedMedicine() {
+  const medId = parseInt(document.getElementById("edit-med-id").value);
+  const name = document.getElementById("edit-med-name").value.trim();
+  const generic = document.getElementById("edit-med-generic").value.trim();
+  const categoryId = parseInt(document.getElementById("edit-med-category").value);
+  const form = document.getElementById("edit-med-form").value;
+  const dosage = document.getElementById("edit-med-dosage").value.trim();
+
+  document.querySelectorAll("#modal-edit-medicine .field-error").forEach(el => el.classList.remove("active"));
+
+  if (!name) {
+    document.getElementById("err-edit-med-name").classList.add("active");
+    return;
+  }
+  if (!generic) {
+    document.getElementById("err-edit-med-generic").classList.add("active");
+    return;
+  }
+
+  const med = MockDB.medicines.find(m => m.id === medId);
+  if (!med) return;
+
+  med.name = name;
+  med.generic = generic;
+  med.categoryId = categoryId;
+  med.form = form;
+  med.dosage = dosage || "Standard";
+
+  closeModal("modal-edit-medicine");
+  refreshAllViews();
+  showToast(`Medicine formulation "#MED-${medId}" updated successfully!`, "success");
+}
+
+// Action: Open Edit Batch Modal
+function openEditBatchModal(batchId) {
+  const batch = MockDB.batches.find(b => b.id === batchId);
+  if (!batch) return;
+
+  document.getElementById("edit-batch-id").value = batch.id;
+  document.getElementById("edit-batch-number").value = batch.batchNumber;
+  document.getElementById("edit-batch-expiry").value = batch.expiryDate;
+  document.getElementById("edit-batch-selling").value = batch.sellingPrice.toFixed(2);
+  document.getElementById("edit-batch-stock").value = batch.stock;
+  document.getElementById("edit-batch-reorder").value = batch.reorderLevel;
+
+  document.querySelectorAll("#modal-edit-batch .field-error").forEach(el => el.classList.remove("active"));
+  openModal("modal-edit-batch");
+}
+
+// Action: Save Edited Batch Details
+function saveEditedBatch() {
+  const batchId = parseInt(document.getElementById("edit-batch-id").value);
+  const expiryDate = document.getElementById("edit-batch-expiry").value;
+  const sellingPrice = parseFloat(document.getElementById("edit-batch-selling").value);
+  const stock = parseInt(document.getElementById("edit-batch-stock").value);
+  const reorderLevel = parseInt(document.getElementById("edit-batch-reorder").value);
+
+  document.querySelectorAll("#modal-edit-batch .field-error").forEach(el => el.classList.remove("active"));
+
+  let isValid = true;
+  if (isNaN(sellingPrice) || sellingPrice <= 0) {
+    document.getElementById("err-edit-batch-price").classList.add("active");
+    isValid = false;
+  }
+  if (isNaN(stock) || stock < 0) {
+    document.getElementById("err-edit-batch-stock").classList.add("active");
+    isValid = false;
+  }
+  if (!expiryDate) {
+    isValid = false;
+  }
+
+  if (!isValid) {
+    showToast("Please enter valid prices and non-negative stock numbers.", "error");
+    return;
+  }
+
+  const batch = MockDB.batches.find(b => b.id === batchId);
+  if (!batch) return;
+
+  batch.expiryDate = expiryDate;
+  batch.sellingPrice = sellingPrice;
+  batch.stock = stock;
+  batch.reorderLevel = reorderLevel || 10;
+
+  closeModal("modal-edit-batch");
+  refreshAllViews();
+  showToast(`Batch "${batch.batchNumber}" updated. Dashboard metrics recalculated.`, "success");
+}
+
+// Action: Quick Restock (+50 Units)
+function quickRestockBatch(batchId) {
+  const batch = MockDB.batches.find(b => b.id === batchId);
+  if (!batch) return;
+
+  const restockQty = 50;
+  batch.stock += restockQty;
+  refreshAllViews();
+  showToast(`Restocked +${restockQty} units for Batch ${batch.batchNumber}. Total stock: ${batch.stock}.`, "success");
+}
+
+// Action: Record Sale Transaction (POS)
 function executeSaleTransaction() {
   const batchId = parseInt(document.getElementById("sale-batch-select").value);
   const qty = parseInt(document.getElementById("sale-quantity-input").value);
   const patientId = parseInt(document.getElementById("sale-patient-select").value) || null;
   const paymentMethod = document.getElementById("sale-payment-method").value;
 
-  if (!batchId || isNaN(qty) || qty <= 0) {
-    showToast("Please choose a valid medicine batch and quantity > 0.", "error");
+  document.querySelectorAll("#modal-record-sale .field-error").forEach(el => el.classList.remove("active"));
+
+  if (!batchId) {
+    document.getElementById("err-sale-batch").classList.add("active");
+    return;
+  }
+
+  if (isNaN(qty) || qty <= 0) {
+    document.getElementById("err-sale-qty").classList.add("active");
     return;
   }
 
   const batch = MockDB.batches.find(b => b.id === batchId);
   if (!batch) {
-    showToast("Selected batch not found.", "error");
+    showToast("Selected batch was not found.", "error");
     return;
   }
 
-  // Trigger check simulation: Prevent overselling
+  // Prevent overselling
   if (qty > batch.stock) {
-    showToast(`Transaction Rejected: Insufficient stock (${batch.stock} available).`, "error");
+    showToast(`Transaction Blocked: Requested ${qty} units, but only ${batch.stock} are available!`, "error");
     return;
   }
 
-  // Trigger check simulation: Prevent selling expired items
+  // Prevent selling expired medicine
   if (getDaysUntil(batch.expiryDate) < 0) {
-    showToast("Transaction Blocked: This batch is EXPIRED and cannot be sold!", "error");
+    showToast("Clinical Safety Warning: This batch is EXPIRED and cannot be dispensed!", "error");
     return;
   }
 
-  // Deduct inventory stock (after_saleitem_insert simulation)
+  // Deduct inventory stock
   batch.stock -= qty;
 
   const med = MockDB.medicines.find(m => m.id === batch.medicineId);
@@ -724,7 +1293,7 @@ function executeSaleTransaction() {
   MockDB.sales.push({
     id: 600 + MockDB.sales.length + 1,
     invoiceNumber: invoiceNum,
-    date: "2026-10-21 13:45",
+    date: "2026-10-21 13:58",
     patientId: patientId,
     doctorId: null,
     prescriptionId: null,
@@ -738,18 +1307,20 @@ function executeSaleTransaction() {
   closeModal("modal-record-sale");
   document.getElementById("form-record-sale").reset();
   refreshAllViews();
-  showToast(`Sale completed! Invoice ${invoiceNum} generated. Stock updated.`, "success");
+  showToast(`Bill ${invoiceNum} generated! Deducted ${qty} units from Batch ${batch.batchNumber}.`, "success");
 }
 
+// Action: Dispense Doctor Prescription
 function dispensePrescription(rxId) {
   const rx = MockDB.prescriptions.find(r => r.id === rxId);
   if (!rx) return;
 
   rx.status = "Fulfilled";
   refreshAllViews();
-  showToast(`Prescription ${rx.rxNumber} marked as Fulfilled and dispensed to patient.`, "success");
+  showToast(`Prescription ${rx.rxNumber} dispensed and marked as Fulfilled.`, "success");
 }
 
+// Quick prepare sale modal from batch
 function prepareSaleFromBatch(batchId) {
   openModal("modal-record-sale");
   const select = document.getElementById("sale-batch-select");
@@ -759,16 +1330,7 @@ function prepareSaleFromBatch(batchId) {
   }
 }
 
-function openRestockModal(batchId) {
-  const batch = MockDB.batches.find(b => b.id === batchId);
-  if (!batch) return;
-
-  const added = 50;
-  batch.stock += added;
-  refreshAllViews();
-  showToast(`Received restock shipment of +${added} units for batch ${batch.batchNumber}.`, "success");
-}
-
+// Tab Switcher Helper
 function switchView(viewName, filterMedicineId = null) {
   const navItem = document.querySelector(`.nav-item[data-view="${viewName}"]`);
   if (navItem) navItem.click();
@@ -778,46 +1340,31 @@ function switchView(viewName, filterMedicineId = null) {
   }
 }
 
+// Receipt Alert Pop-up
 function showInvoiceDetails(saleId) {
   const sale = MockDB.sales.find(s => s.id === saleId);
   if (!sale) return;
-  alert(`=== CLINICAL PHARMACY SALES RECEIPT ===\nInvoice: ${sale.invoiceNumber}\nDate: ${sale.date}\nPayment: ${sale.paymentMethod}\nTotal Paid: $${sale.totalAmount.toFixed(2)}\nItems:\n${sale.items.map(i => `- ${i.medicineName} x ${i.qty} = $${i.subtotal.toFixed(2)}`).join("\n")}`);
-}
-
-function filterGlobalSearch(term) {
-  if (!term) {
-    refreshAllViews();
-    return;
-  }
-  // Filter medicines table
-  const tbody = document.getElementById("medicines-table-tbody");
-  if (tbody) {
-    const filtered = MockDB.medicines.filter(m => 
-      m.name.toLowerCase().includes(term) || 
-      m.generic.toLowerCase().includes(term)
-    );
-    tbody.innerHTML = filtered.map(med => {
-      const cat = MockDB.categories.find(c => c.id === med.categoryId);
-      const totalStock = getMedicineTotalStock(med.id);
-      return `
-        <tr>
-          <td><span class="font-mono">#MED-${med.id}</span></td>
-          <td><strong>${med.name}</strong><div style="font-size:0.75rem; color:var(--text-muted);">${med.generic}</div></td>
-          <td><span class="badge-status badge-info">${cat ? cat.name : '-'}</span></td>
-          <td>${med.form} (${med.dosage})</td>
-          <td><strong>${totalStock} units</strong></td>
-          <td>-</td>
-          <td><span class="badge-status badge-in-stock">Available</span></td>
-          <td><button class="btn btn-outline btn-sm" onclick="switchView('batches', ${med.id})">Batches</button></td>
-        </tr>
-      `;
-    }).join("");
-  }
+  alert(
+    `========================================\n` +
+    `  PHARMACARE CLINICAL SALES RECEIPT     \n` +
+    `========================================\n` +
+    `Invoice: ${sale.invoiceNumber}\n` +
+    `Date:    ${sale.date}\n` +
+    `Payment: ${sale.paymentMethod}\n` +
+    `----------------------------------------\n` +
+    `Items Dispensed:\n` +
+    sale.items.map(i => `  • ${i.medicineName} x ${i.qty} = $${i.subtotal.toFixed(2)}`).join("\n") + "\n" +
+    `----------------------------------------\n` +
+    `TOTAL AMOUNT: $${sale.totalAmount.toFixed(2)}\n` +
+    `========================================\n` +
+    `Thank you for choosing PharmaCare Rx!`
+  );
 }
 
 // =====================================================================
 // 7. Toast Notification Utility
 // =====================================================================
+
 function showToast(message, type = "success") {
   let container = document.querySelector(".toast-container");
   if (!container) {

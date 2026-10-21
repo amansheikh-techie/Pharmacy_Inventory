@@ -119,6 +119,17 @@
 
       <!-- Content Area -->
       <main class="content-area">
+
+        <!-- Phase 2B: In-Memory Sample Data Label Banner -->
+        <div class="demo-mode-banner">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span class="demo-mode-badge">Phase 2B Demo</span>
+            <span><strong>Interactive Frontend Simulation Mode:</strong> Using in-memory sample clinical data. Changes update tables and dashboard counters in real time. (Database sync active in Phase 3).</span>
+          </div>
+          <button class="btn btn-outline btn-sm" id="btn-reset-demo-data" style="background:#ffffff; border-color:#a7f3d0; font-size:0.75rem;">
+            Reset Sample Data
+          </button>
+        </div>
         
         <!-- =================================================================
              VIEW 1: DASHBOARD
@@ -324,17 +335,17 @@
           </div>
 
           <div class="content-card">
+            <!-- Phase 2B: Functional Search & Category Filter Toolbar -->
             <div class="table-toolbar">
               <div class="toolbar-filters">
-                <input type="text" class="filter-input" placeholder="Filter by name, generic..." style="width:240px;">
-                <select class="filter-input">
+                <input type="text" id="medicine-search-input" class="filter-input" placeholder="Search by brand name or generic..." style="width:260px;">
+                <select id="medicine-category-filter" class="filter-input">
                   <option value="">All Categories</option>
-                  <option value="1">Antibiotics</option>
-                  <option value="2">Pain Relief & Analgesics</option>
-                  <option value="3">Antihistamines</option>
-                  <option value="4">Cardiovascular</option>
-                  <option value="5">Gastrointestinal</option>
                 </select>
+                <button class="btn btn-outline btn-sm" id="btn-clear-medicine-filters">Clear</button>
+              </div>
+              <div style="font-size:0.8rem; color:var(--text-muted);" id="medicine-count-display">
+                Showing 0 medicines
               </div>
             </div>
 
@@ -379,16 +390,21 @@
           </div>
 
           <div class="content-card">
+            <!-- Phase 2B: Functional Search & Expiry Status Filter Toolbar -->
             <div class="table-toolbar">
               <div class="toolbar-filters">
-                <input type="text" class="filter-input" placeholder="Search batch number..." style="width:220px;">
-                <select class="filter-input">
+                <input type="text" id="batch-search-input" class="filter-input" placeholder="Search batch number or medicine..." style="width:260px;">
+                <select id="batch-status-filter" class="filter-input">
                   <option value="">All Statuses</option>
-                  <option value="valid">Valid Stock</option>
-                  <option value="expiring">Expiring Soon (&lt; 30 days)</option>
+                  <option value="in-stock">In Stock / Valid</option>
+                  <option value="low-stock">Low Stock (≤ Reorder)</option>
+                  <option value="warning">Expiring Soon (≤ 30d)</option>
                   <option value="expired">Expired Batches</option>
-                  <option value="low">Low Stock</option>
                 </select>
+                <button class="btn btn-outline btn-sm" id="btn-clear-batch-filters">Clear</button>
+              </div>
+              <div style="font-size:0.8rem; color:var(--text-muted);" id="batch-count-display">
+                Showing 0 batches
               </div>
             </div>
 
@@ -429,6 +445,21 @@
             </div>
           </div>
 
+          <!-- Phase 2B: Prescription Search & Status Filter -->
+          <div class="content-card" style="margin-bottom: 20px;">
+            <div class="table-toolbar">
+              <div class="toolbar-filters">
+                <input type="text" id="rx-search-input" class="filter-input" placeholder="Search patient, doctor, diagnosis..." style="width:260px;">
+                <select id="rx-status-filter" class="filter-input">
+                  <option value="">All Prescriptions</option>
+                  <option value="Active">Active / Pending Dispense</option>
+                  <option value="Fulfilled">Fulfilled</option>
+                </select>
+                <button class="btn btn-outline btn-sm" id="btn-clear-rx-filters">Clear</button>
+              </div>
+            </div>
+          </div>
+
           <div id="prescriptions-cards-container">
             <!-- Injected via JavaScript -->
           </div>
@@ -450,6 +481,17 @@
           </div>
 
           <div class="content-card">
+            <!-- Phase 2B: Sales Search Toolbar -->
+            <div class="table-toolbar">
+              <div class="toolbar-filters">
+                <input type="text" id="sale-search-input" class="filter-input" placeholder="Search invoice, patient, payment method..." style="width:280px;">
+                <button class="btn btn-outline btn-sm" id="btn-clear-sale-filters">Clear</button>
+              </div>
+              <div style="font-size:0.8rem; color:var(--text-muted);" id="sales-count-display">
+                Showing 0 sales
+              </div>
+            </div>
+
             <div class="card-body">
               <div class="table-responsive">
                 <table class="clinical-table">
@@ -499,35 +541,8 @@
                       <th>Medical History Notes</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    <tr>
-                      <td><span class="font-mono">#PAT-201</span></td>
-                      <td><strong>Rahul Mehta</strong></td>
-                      <td>+91 98700 11223</td>
-                      <td>28y, Male</td>
-                      <td>Seasonal Rhinitis</td>
-                    </tr>
-                    <tr>
-                      <td><span class="font-mono">#PAT-202</span></td>
-                      <td><strong>Sneha Rao</strong></td>
-                      <td>+91 98900 44556</td>
-                      <td>34y, Female</td>
-                      <td>Mild Gastritis</td>
-                    </tr>
-                    <tr>
-                      <td><span class="font-mono">#PAT-203</span></td>
-                      <td><strong>Vikram Joshi</strong></td>
-                      <td>+91 97655 33221</td>
-                      <td>62y, Male</td>
-                      <td>Essential Hypertension</td>
-                    </tr>
-                    <tr>
-                      <td><span class="font-mono">#PAT-204</span></td>
-                      <td><strong>Ananya Sharma</strong></td>
-                      <td>+91 98112 34567</td>
-                      <td>45y, Female</td>
-                      <td>Bronchial Sensitivity</td>
-                    </tr>
+                  <tbody id="patients-table-tbody">
+                    <!-- Injected via JavaScript -->
                   </tbody>
                 </table>
               </div>
@@ -559,28 +574,8 @@
                       <th>Phone</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    <tr>
-                      <td><span class="font-mono">#DOC-301</span></td>
-                      <td><strong>Dr. Arvind Nair, MD</strong></td>
-                      <td>General Medicine</td>
-                      <td><span class="font-mono">MCI-2015-88941</span></td>
-                      <td>+91 98200 98200</td>
-                    </tr>
-                    <tr>
-                      <td><span class="font-mono">#DOC-302</span></td>
-                      <td><strong>Dr. Kavita Kulkarni, DM</strong></td>
-                      <td>Cardiology</td>
-                      <td><span class="font-mono">MCI-2012-44120</span></td>
-                      <td>+91 98300 98300</td>
-                    </tr>
-                    <tr>
-                      <td><span class="font-mono">#DOC-303</span></td>
-                      <td><strong>Dr. Rohan Deshmukh, MD</strong></td>
-                      <td>Pulmonology</td>
-                      <td><span class="font-mono">MCI-2018-77211</span></td>
-                      <td>+91 98400 98400</td>
-                    </tr>
+                  <tbody id="doctors-table-tbody">
+                    <!-- Injected via JavaScript -->
                   </tbody>
                 </table>
               </div>
@@ -674,7 +669,7 @@
   </div>
 
   <!-- =====================================================================
-       MODAL 1: ADD MEDICINE & BATCH
+       MODAL 1: ADD MEDICINE & BATCH (With Validation Hints)
        ===================================================================== -->
   <div class="modal-overlay" id="modal-add-medicine">
     <div class="modal-box">
@@ -686,7 +681,7 @@
         <button class="modal-close-btn">&times;</button>
       </div>
 
-      <form id="form-add-medicine">
+      <form id="form-add-medicine" novalidate>
         <div class="modal-body">
           <div style="font-size:0.75rem; text-transform:uppercase; font-weight:700; color:var(--text-muted); margin-bottom:12px;">
             1. Medicine Master Record
@@ -695,7 +690,8 @@
           <div class="form-grid">
             <div class="form-group">
               <label for="new-med-name">Medicine Brand Name *</label>
-              <input type="text" id="new-med-name" placeholder="e.g. Augmentin 625mg" required>
+              <input type="text" id="new-med-name" placeholder="e.g. Augmentin 625mg">
+              <div class="field-error" id="err-new-med-name">Medicine brand name is required.</div>
             </div>
             <div class="form-group">
               <label for="new-med-generic">Generic Formulation</label>
@@ -703,7 +699,7 @@
             </div>
             <div class="form-group">
               <label for="new-med-category">Category *</label>
-              <select id="new-med-category" required></select>
+              <select id="new-med-category"></select>
             </div>
             <div class="form-group">
               <label for="new-med-form">Dosage Form</label>
@@ -728,27 +724,33 @@
           <div class="form-grid">
             <div class="form-group">
               <label for="new-batch-number">Batch Number *</label>
-              <input type="text" id="new-batch-number" placeholder="e.g. BATCH-AUG-991" required>
+              <input type="text" id="new-batch-number" placeholder="e.g. BATCH-AUG-991">
+              <div class="field-error" id="err-new-batch-number">Batch number is required.</div>
             </div>
             <div class="form-group">
               <label for="new-batch-expiry">Expiry Date *</label>
-              <input type="date" id="new-batch-expiry" required>
+              <input type="date" id="new-batch-expiry">
+              <div class="field-error" id="err-new-batch-expiry">Valid expiry date is required.</div>
             </div>
             <div class="form-group">
-              <label for="new-batch-purchase">Purchase Unit Price ($)</label>
-              <input type="number" step="0.01" id="new-batch-purchase" placeholder="4.50" required>
+              <label for="new-batch-purchase">Purchase Unit Price ($) *</label>
+              <input type="number" step="0.01" min="0" id="new-batch-purchase" placeholder="4.50" value="4.50">
+              <div class="field-error" id="err-new-batch-purchase">Purchase price cannot be negative.</div>
             </div>
             <div class="form-group">
-              <label for="new-batch-selling">Selling Unit Price ($)</label>
-              <input type="number" step="0.01" id="new-batch-selling" placeholder="7.00" required>
+              <label for="new-batch-selling">Selling Unit Price ($) *</label>
+              <input type="number" step="0.01" min="0.01" id="new-batch-selling" placeholder="7.00" value="7.00">
+              <div class="field-error" id="err-new-batch-selling">Selling price must be greater than 0.</div>
             </div>
             <div class="form-group">
               <label for="new-batch-stock">Stock Units *</label>
-              <input type="number" id="new-batch-stock" placeholder="100" required>
+              <input type="number" min="0" id="new-batch-stock" placeholder="100" value="100">
+              <div class="field-error" id="err-new-batch-stock">Stock units cannot be negative.</div>
             </div>
             <div class="form-group">
-              <label for="new-batch-reorder">Low Stock Alert Level</label>
-              <input type="number" id="new-batch-reorder" placeholder="20" value="20" required>
+              <label for="new-batch-reorder">Low Stock Alert Level *</label>
+              <input type="number" min="1" id="new-batch-reorder" placeholder="20" value="20">
+              <div class="field-error" id="err-new-batch-reorder">Reorder level must be at least 1.</div>
             </div>
           </div>
         </div>
@@ -774,7 +776,7 @@
         <button class="modal-close-btn">&times;</button>
       </div>
 
-      <form id="form-record-sale">
+      <form id="form-record-sale" novalidate>
         <div class="modal-body">
           <div class="form-grid single-col">
             
@@ -785,12 +787,14 @@
 
             <div class="form-group">
               <label for="sale-batch-select">Dispense Medicine Batch *</label>
-              <select id="sale-batch-select" required></select>
+              <select id="sale-batch-select"></select>
+              <div class="field-error" id="err-sale-batch">Please select a valid medicine batch.</div>
             </div>
 
             <div class="form-group">
               <label for="sale-quantity-input">Quantity to Dispense *</label>
-              <input type="number" id="sale-quantity-input" min="1" value="1" required>
+              <input type="number" id="sale-quantity-input" min="1" value="1">
+              <div class="field-error" id="err-sale-qty">Quantity must be a positive integer.</div>
               <div id="sale-stock-warning" style="font-size:0.78rem; font-weight:600; margin-top:3px;"></div>
             </div>
 
@@ -821,6 +825,176 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-outline btn-modal-cancel">Cancel</button>
           <button type="submit" class="btn btn-primary">Confirm & Print Bill</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       MODAL 3: VIEW MEDICINE DETAILS (Phase 2B)
+       ===================================================================== -->
+  <div class="modal-overlay" id="modal-view-medicine">
+    <div class="modal-box" style="max-width: 650px;">
+      <div class="modal-header">
+        <h3>
+          <svg style="width:20px; height:20px; stroke:var(--primary); fill:none; stroke-width:2;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+          Medicine Formulation Details
+        </h3>
+        <button class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="detail-grid">
+          <div class="detail-item">
+            <div class="detail-label">Brand Name</div>
+            <div class="detail-value" id="view-med-name">-</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Generic Formulation</div>
+            <div class="detail-value" id="view-med-generic">-</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Category</div>
+            <div class="detail-value" id="view-med-category">-</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Dosage & Form</div>
+            <div class="detail-value" id="view-med-form">-</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Total Stock in Dispensary</div>
+            <div class="detail-value" id="view-med-stock" style="color:var(--primary);">-</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Active Batches</div>
+            <div class="detail-value" id="view-med-batches-count">-</div>
+          </div>
+        </div>
+
+        <h4 style="font-size:0.88rem; font-weight:700; margin-bottom:10px; color:var(--text-main);">
+          Active Inventory Batches for this Formulation
+        </h4>
+        <div class="table-responsive">
+          <table class="clinical-table">
+            <thead>
+              <tr>
+                <th>Batch #</th>
+                <th>Expiry</th>
+                <th>Stock</th>
+                <th>Selling Price</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="view-med-batches-tbody">
+              <!-- Injected via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline btn-modal-cancel">Close</button>
+        <button type="button" class="btn btn-primary" id="btn-view-med-edit">Edit Formulation</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       MODAL 4: EDIT MEDICINE (Phase 2B)
+       ===================================================================== -->
+  <div class="modal-overlay" id="modal-edit-medicine">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>
+          <svg style="width:20px; height:20px; stroke:var(--primary); fill:none; stroke-width:2;" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+          Edit Medicine Formulation
+        </h3>
+        <button class="modal-close-btn">&times;</button>
+      </div>
+      <form id="form-edit-medicine" novalidate>
+        <input type="hidden" id="edit-med-id">
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-group col-span-2">
+              <label for="edit-med-name">Medicine Brand Name *</label>
+              <input type="text" id="edit-med-name" required>
+              <div class="field-error" id="err-edit-med-name">Medicine brand name cannot be empty.</div>
+            </div>
+            <div class="form-group col-span-2">
+              <label for="edit-med-generic">Generic Formulation *</label>
+              <input type="text" id="edit-med-generic" required>
+              <div class="field-error" id="err-edit-med-generic">Generic name cannot be empty.</div>
+            </div>
+            <div class="form-group">
+              <label for="edit-med-category">Category *</label>
+              <select id="edit-med-category" required></select>
+            </div>
+            <div class="form-group">
+              <label for="edit-med-form">Dosage Form</label>
+              <select id="edit-med-form">
+                <option value="Tablet">Tablet</option>
+                <option value="Capsule">Capsule</option>
+                <option value="Syrup">Syrup</option>
+                <option value="Injection">Injection</option>
+                <option value="Ointment">Ointment</option>
+                <option value="Chewable">Chewable</option>
+              </select>
+            </div>
+            <div class="form-group col-span-2">
+              <label for="edit-med-dosage">Dosage Strength *</label>
+              <input type="text" id="edit-med-dosage" required>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline btn-modal-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary">Update Medicine</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       MODAL 5: EDIT BATCH (Phase 2B)
+       ===================================================================== -->
+  <div class="modal-overlay" id="modal-edit-batch">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>
+          <svg style="width:20px; height:20px; stroke:var(--primary); fill:none; stroke-width:2;" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+          Update Batch Stock & Pricing
+        </h3>
+        <button class="modal-close-btn">&times;</button>
+      </div>
+      <form id="form-edit-batch" novalidate>
+        <input type="hidden" id="edit-batch-id">
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Batch Number</label>
+              <input type="text" id="edit-batch-number" disabled style="background:#f1f5f9; cursor:not-allowed;">
+            </div>
+            <div class="form-group">
+              <label for="edit-batch-expiry">Expiry Date *</label>
+              <input type="date" id="edit-batch-expiry" required>
+            </div>
+            <div class="form-group">
+              <label for="edit-batch-selling">Selling Price ($) *</label>
+              <input type="number" step="0.01" min="0.01" id="edit-batch-selling" required>
+              <div class="field-error" id="err-edit-batch-price">Selling price must be greater than 0.</div>
+            </div>
+            <div class="form-group">
+              <label for="edit-batch-stock">Stock Units *</label>
+              <input type="number" min="0" id="edit-batch-stock" required>
+              <div class="field-error" id="err-edit-batch-stock">Stock units cannot be negative.</div>
+            </div>
+            <div class="form-group col-span-2">
+              <label for="edit-batch-reorder">Low Stock Alert Level *</label>
+              <input type="number" min="1" id="edit-batch-reorder" required>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline btn-modal-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Batch Changes</button>
         </div>
       </form>
     </div>
