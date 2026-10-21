@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PharmaCare Rx — Clinical Pharmacy Inventory & Prescription Management</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <div class="app-container">
+    
+    <!-- =====================================================================
+         SIDEBAR NAVIGATION
+         ===================================================================== -->
+    <aside class="sidebar">
+      <div class="brand-section">
+        <div class="medical-cross-logo">
+          <!-- Medical Cross SVG -->
+          <svg viewBox="0 0 24 24">
+            <path d="M19 10.5h-5.5V5c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v5.5H5c-.83 0-1.5.67-1.5 1.5s.67 1.5 1.5 1.5h5.5V19c0 .83.67 1.5 1.5 1.5s1.5-.67 1.5-1.5v-5.5H19c.83 0 1.5-.67 1.5-1.5s-.67-1.5-1.5-1.5z"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1>PharmaCare Rx</h1>
+          <p>Clinical Dispensary</p>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-label">Core Operations</div>
+        
+        <a class="nav-item active" data-view="dashboard" id="nav-dashboard">
+          <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
+          Dashboard
+        </a>
+
+        <a class="nav-item" data-view="medicines" id="nav-medicines">
+          <svg viewBox="0 0 24 24"><path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"></path><path d="m8.5 8.5 7 7"></path></svg>
+          Medicines
+        </a>
+
+        <a class="nav-item" data-view="batches" id="nav-batches">
+          <svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+          Inventory & Batches
+          <span class="badge" id="sidebar-alert-badge" style="display:none;">0</span>
+        </a>
+
+        <div class="nav-label">Patient & Clinical</div>
+
+        <a class="nav-item" data-view="prescriptions" id="nav-prescriptions">
+          <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+          Prescriptions
+        </a>
+
+        <a class="nav-item" data-view="sales" id="nav-sales">
+          <svg viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
+          Sales & POS
+        </a>
+
+        <a class="nav-item" data-view="patients" id="nav-patients">
+          <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+          Patients
+        </a>
+
+        <a class="nav-item" data-view="doctors" id="nav-doctors">
+          <svg viewBox="0 0 24 24"><path d="M4.8 2.3A.3.3 0 1 0 5 2H4a2 2 0 0 0-2 2v5a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6V4a2 2 0 0 0-2-2h-1a.2.2 0 1 0 .3.3"></path><path d="M8 15v1a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6v-4"></path><circle cx="20" cy="10" r="2"></circle></svg>
+          Doctors
+        </a>
+
+        <div class="nav-label">Auditing & DBMS</div>
+
+        <a class="nav-item" data-view="reports" id="nav-reports">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+          Reports & Procedures
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="pharmacist-card">
+          <div class="pharmacist-avatar">AV</div>
+          <div class="pharmacist-info">
+            <div class="pharmacist-name">A. Verma, R.Ph</div>
+            <div class="pharmacist-role">Reg #PH-2024-91</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- =====================================================================
+         MAIN VIEW WRAPPER
+         ===================================================================== -->
+    <div class="main-wrapper">
+      
+      <!-- Top Sticky Navbar -->
+      <header class="top-navbar">
+        <div class="nav-search">
+          <svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+          <input type="text" id="global-search-input" placeholder="Search medicines, batches, patients, Rx...">
+        </div>
+
+        <div class="nav-actions">
+          <div class="clinic-status-badge">
+            <span class="pulse-dot"></span>
+            Dispensary Active
+          </div>
+
+          <button class="btn btn-outline" id="btn-add-medicine-top">
+            <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            Add Medicine
+          </button>
+
+          <button class="btn btn-primary" id="btn-record-sale-top">
+            <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            New Dispense / Sale
+          </button>
+        </div>
+      </header>
+
+      <!-- Content Area -->
+      <main class="content-area">
+        
+        <!-- =================================================================
+             VIEW 1: DASHBOARD
+             ================================================================= -->
+        <section id="view-dashboard" class="view-section active">
+          
+          <div class="page-header">
+            <div class="page-title">
+              <h2>Dispensary Operations Dashboard</h2>
+              <p>Real-time pharmaceutical inventory, batch expiry tracking, and active prescriptions</p>
+            </div>
+            <div>
+              <span style="font-size: 0.8rem; font-weight:600; color:var(--text-muted); background:#ffffff; padding:6px 14px; border-radius:var(--radius-md); border:1px solid var(--border);">
+                📅 Wednesday, 21 Oct 2026
+              </span>
+            </div>
+          </div>
+
+          <!-- 4 Stat Metric Cards -->
+          <div class="stats-grid">
+            
+            <div class="stat-card card-primary">
+              <div>
+                <div class="stat-header">Total Medicines</div>
+                <div class="stat-value" id="stat-total-medicines">0</div>
+                <div class="stat-sub">Across 6 therapeutic categories</div>
+              </div>
+              <div class="stat-icon icon-emerald">
+                <svg viewBox="0 0 24 24"><path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"></path><path d="m8.5 8.5 7 7"></path></svg>
+              </div>
+            </div>
+
+            <div class="stat-card card-success">
+              <div>
+                <div class="stat-header">Total Stock Units</div>
+                <div class="stat-value" id="stat-total-stock">0</div>
+                <div class="stat-sub">Units ready for dispensing</div>
+              </div>
+              <div class="stat-icon icon-teal">
+                <svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>
+              </div>
+            </div>
+
+            <div class="stat-card card-warning">
+              <div>
+                <div class="stat-header">Low-Stock Batches</div>
+                <div class="stat-value" id="stat-low-stock">0</div>
+                <div class="stat-sub">At or below reorder threshold</div>
+              </div>
+              <div class="stat-icon icon-amber">
+                <svg viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+              </div>
+            </div>
+
+            <div class="stat-card card-danger">
+              <div>
+                <div class="stat-header">Expiring / Expired</div>
+                <div class="stat-value" id="stat-expiring">0</div>
+                <div class="stat-sub">Batches requiring quarantine/disposal</div>
+              </div>
+              <div class="stat-icon icon-rose">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Quick Actions Bar -->
+          <div class="quick-action-strip">
+            <div class="strip-label">
+              <svg style="width:18px; height:18px; stroke:var(--primary); fill:none; stroke-width:2;" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+              Clinical Quick Actions
+            </div>
+            <div class="action-buttons-group">
+              <button class="btn btn-outline btn-sm" id="btn-add-medicine-strip">
+                + Register Medicine & Batch
+              </button>
+              <button class="btn btn-primary btn-sm" id="btn-record-sale-strip">
+                + Dispense Bill (POS)
+              </button>
+              <button class="btn btn-outline btn-sm" onclick="switchView('prescriptions')">
+                View Pending Rx
+              </button>
+              <button class="btn btn-outline btn-sm" onclick="switchView('reports')">
+                Run Stored Procedures
+              </button>
+            </div>
+          </div>
+
+          <!-- Two Column Grid -->
+          <div class="dashboard-grid">
+            
+            <!-- Left Column: Critical Batches & Recent Sales -->
+            <div class="dash-column">
+              
+              <!-- Critical Stock & Expiry Table -->
+              <div class="content-card">
+                <div class="card-header">
+                  <h3>
+                    <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                    Batch Expiry & Critical Stock Monitor
+                  </h3>
+                  <button class="btn btn-outline btn-sm" onclick="switchView('batches')">View All Batches</button>
+                </div>
+                <div class="card-body">
+                  <div class="table-responsive">
+                    <table class="clinical-table">
+                      <thead>
+                        <tr>
+                          <th>Medicine</th>
+                          <th>Batch #</th>
+                          <th>Stock</th>
+                          <th>Expiry Date</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody id="dashboard-alerts-tbody">
+                        <!-- Injected via JavaScript -->
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Recent Dispensary Sales -->
+              <div class="content-card">
+                <div class="card-header">
+                  <h3>
+                    <svg viewBox="0 0 24 24" fill="none"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
+                    Recent Dispensary Sales
+                  </h3>
+                  <button class="btn btn-outline btn-sm" onclick="switchView('sales')">View Full Ledger</button>
+                </div>
+                <div class="card-body">
+                  <div class="table-responsive">
+                    <table class="clinical-table">
+                      <thead>
+                        <tr>
+                          <th>Invoice</th>
+                          <th>Patient</th>
+                          <th>Items</th>
+                          <th>Total</th>
+                          <th>Payment</th>
+                        </tr>
+                      </thead>
+                      <tbody id="dashboard-sales-tbody">
+                        <!-- Injected via JavaScript -->
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Right Column: Low Stock Alerts with Visual Meter -->
+            <div class="dash-column">
+              
+              <div class="content-card">
+                <div class="card-header">
+                  <h3>
+                    <svg viewBox="0 0 24 24" fill="none"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path></svg>
+                    Low Stock Reorder Alerts
+                  </h3>
+                </div>
+                <div class="card-body" id="dashboard-lowstock-list">
+                  <!-- Injected via JavaScript -->
+                </div>
+              </div>
+
+              <!-- Quick Clinical Notice -->
+              <div class="content-card" style="background: linear-gradient(135deg, #064e3b 0%, #047857 100%); color:#ffffff;">
+                <div style="padding: 24px;">
+                  <h4 style="font-size: 1rem; font-weight:700; margin-bottom: 8px; display:flex; align-items:center; gap:8px;">
+                    <svg style="width:20px; height:20px; stroke:#a7f3d0; fill:none; stroke-width:2;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path></svg>
+                    Dispensary Protocol Reminder
+                  </h4>
+                  <p style="font-size: 0.82rem; color:#d1fae5; line-height:1.6;">
+                    Always follow <strong>First-Expiry, First-Out (FEFO)</strong> batch dispensing. Never dispense medications marked with red quarantine badges or past their labeled expiry dates.
+                  </p>
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+
+        </section>
+
+        <!-- =================================================================
+             VIEW 2: MEDICINES
+             ================================================================= -->
+        <section id="view-medicines" class="view-section">
+          
+          <div class="page-header">
+            <div class="page-title">
+              <h2>Medicine Master Catalog</h2>
+              <p>Registered therapeutic formulations and aggregated batch inventory</p>
+            </div>
+            <button class="btn btn-primary" onclick="openModal('modal-add-medicine')">
+              + Register New Medicine
+            </button>
+          </div>
+
+          <div class="content-card">
+            <div class="table-toolbar">
+              <div class="toolbar-filters">
+                <input type="text" class="filter-input" placeholder="Filter by name, generic..." style="width:240px;">
+                <select class="filter-input">
+                  <option value="">All Categories</option>
+                  <option value="1">Antibiotics</option>
+                  <option value="2">Pain Relief & Analgesics</option>
+                  <option value="3">Antihistamines</option>
+                  <option value="4">Cardiovascular</option>
+                  <option value="5">Gastrointestinal</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="card-body">
+              <div class="table-responsive">
+                <table class="clinical-table">
+                  <thead>
+                    <tr>
+                      <th>Medicine Code</th>
+                      <th>Brand / Generic Name</th>
+                      <th>Category</th>
+                      <th>Dosage Form</th>
+                      <th>Total Stock</th>
+                      <th>Batches</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="medicines-table-tbody">
+                    <!-- Injected via JavaScript -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+        </section>
+
+        <!-- =================================================================
+             VIEW 3: INVENTORY & BATCHES
+             ================================================================= -->
+        <section id="view-batches" class="view-section">
+          
+          <div class="page-header">
+            <div class="page-title">
+              <h2>Batch-Level Traceability & Inventory</h2>
+              <p>Track unique batch numbers, expiry dates, purchase costs, and stock levels</p>
+            </div>
+            <button class="btn btn-primary" onclick="openModal('modal-add-medicine')">
+              + Add Medicine Batch
+            </button>
+          </div>
+
+          <div class="content-card">
+            <div class="table-toolbar">
+              <div class="toolbar-filters">
+                <input type="text" class="filter-input" placeholder="Search batch number..." style="width:220px;">
+                <select class="filter-input">
+                  <option value="">All Statuses</option>
+                  <option value="valid">Valid Stock</option>
+                  <option value="expiring">Expiring Soon (&lt; 30 days)</option>
+                  <option value="expired">Expired Batches</option>
+                  <option value="low">Low Stock</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="card-body">
+              <div class="table-responsive">
+                <table class="clinical-table">
+                  <thead>
+                    <tr>
+                      <th>Batch #</th>
+                      <th>Medicine Name</th>
+                      <th>Expiry Date</th>
+                      <th>Days to Expiry</th>
+                      <th>Cost Price</th>
+                      <th>Selling Price</th>
+                      <th>Stock Quantity</th>
+                      <th>Quality Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="batches-table-tbody">
+                    <!-- Injected via JavaScript -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+        </section>
+
+        <!-- =================================================================
+             VIEW 4: PRESCRIPTIONS
+             ================================================================= -->
+        <section id="view-prescriptions" class="view-section">
+          <div class="page-header">
+            <div class="page-title">
+              <h2>Doctor Prescriptions Queue</h2>
+              <p>Manage medical prescriptions issued by physicians for registered patients</p>
+            </div>
+          </div>
+
+          <div id="prescriptions-cards-container">
+            <!-- Injected via JavaScript -->
+          </div>
+        </section>
+
+        <!-- =================================================================
+             VIEW 5: SALES & BILLING
+             ================================================================= -->
+        <section id="view-sales" class="view-section">
+          
+          <div class="page-header">
+            <div class="page-title">
+              <h2>Dispensary Sales & Billing History</h2>
+              <p>Point-of-sale audit log, receipts, and inventory deductions</p>
+            </div>
+            <button class="btn btn-primary" onclick="openModal('modal-record-sale')">
+              + New Sale Transaction
+            </button>
+          </div>
+
+          <div class="content-card">
+            <div class="card-body">
+              <div class="table-responsive">
+                <table class="clinical-table">
+                  <thead>
+                    <tr>
+                      <th>Invoice #</th>
+                      <th>Date / Time</th>
+                      <th>Patient / Customer</th>
+                      <th>Prescribing Doctor</th>
+                      <th>Items Dispensed</th>
+                      <th>Payment</th>
+                      <th>Total Amount</th>
+                      <th>Receipt</th>
+                    </tr>
+                  </thead>
+                  <tbody id="sales-table-tbody">
+                    <!-- Injected via JavaScript -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+        </section>
+
+        <!-- =================================================================
+             VIEW 6: PATIENTS
+             ================================================================= -->
+        <section id="view-patients" class="view-section">
+          <div class="page-header">
+            <div class="page-title">
+              <h2>Patient Registry</h2>
+              <p>Registered dispensary customers and medical profiles</p>
+            </div>
+          </div>
+
+          <div class="content-card">
+            <div class="card-body">
+              <div class="table-responsive">
+                <table class="clinical-table">
+                  <thead>
+                    <tr>
+                      <th>Patient ID</th>
+                      <th>Full Name</th>
+                      <th>Contact Phone</th>
+                      <th>Demographics</th>
+                      <th>Medical History Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><span class="font-mono">#PAT-201</span></td>
+                      <td><strong>Rahul Mehta</strong></td>
+                      <td>+91 98700 11223</td>
+                      <td>28y, Male</td>
+                      <td>Seasonal Rhinitis</td>
+                    </tr>
+                    <tr>
+                      <td><span class="font-mono">#PAT-202</span></td>
+                      <td><strong>Sneha Rao</strong></td>
+                      <td>+91 98900 44556</td>
+                      <td>34y, Female</td>
+                      <td>Mild Gastritis</td>
+                    </tr>
+                    <tr>
+                      <td><span class="font-mono">#PAT-203</span></td>
+                      <td><strong>Vikram Joshi</strong></td>
+                      <td>+91 97655 33221</td>
+                      <td>62y, Male</td>
+                      <td>Essential Hypertension</td>
+                    </tr>
+                    <tr>
+                      <td><span class="font-mono">#PAT-204</span></td>
+                      <td><strong>Ananya Sharma</strong></td>
+                      <td>+91 98112 34567</td>
+                      <td>45y, Female</td>
+                      <td>Bronchial Sensitivity</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- =================================================================
+             VIEW 7: DOCTORS
+             ================================================================= -->
+        <section id="view-doctors" class="view-section">
+          <div class="page-header">
+            <div class="page-title">
+              <h2>Registered Medical Practitioners</h2>
+              <p>Licensed physicians authorized to issue medication prescriptions</p>
+            </div>
+          </div>
+
+          <div class="content-card">
+            <div class="card-body">
+              <div class="table-responsive">
+                <table class="clinical-table">
+                  <thead>
+                    <tr>
+                      <th>Doctor ID</th>
+                      <th>Physician Name</th>
+                      <th>Specialization</th>
+                      <th>License #</th>
+                      <th>Phone</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><span class="font-mono">#DOC-301</span></td>
+                      <td><strong>Dr. Arvind Nair, MD</strong></td>
+                      <td>General Medicine</td>
+                      <td><span class="font-mono">MCI-2015-88941</span></td>
+                      <td>+91 98200 98200</td>
+                    </tr>
+                    <tr>
+                      <td><span class="font-mono">#DOC-302</span></td>
+                      <td><strong>Dr. Kavita Kulkarni, DM</strong></td>
+                      <td>Cardiology</td>
+                      <td><span class="font-mono">MCI-2012-44120</span></td>
+                      <td>+91 98300 98300</td>
+                    </tr>
+                    <tr>
+                      <td><span class="font-mono">#DOC-303</span></td>
+                      <td><strong>Dr. Rohan Deshmukh, MD</strong></td>
+                      <td>Pulmonology</td>
+                      <td><span class="font-mono">MCI-2018-77211</span></td>
+                      <td>+91 98400 98400</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- =================================================================
+             VIEW 8: REPORTS & STORED PROCEDURES
+             ================================================================= -->
+        <section id="view-reports" class="view-section">
+          
+          <div class="page-header">
+            <div class="page-title">
+              <h2>DBMS Stored Procedures & Audit Reports</h2>
+              <p>Live frontend demonstrations matching MySQL stored procedures <code>GetLowStock()</code> and <code>GetExpiryReport()</code></p>
+            </div>
+          </div>
+
+          <div class="dashboard-grid">
+            
+            <!-- Stored Procedure 1: GetLowStock() -->
+            <div class="dash-column">
+              <div class="content-card">
+                <div class="card-header">
+                  <h3>
+                    <svg viewBox="0 0 24 24" fill="none"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+                    Procedure: CALL GetLowStock()
+                  </h3>
+                  <span class="badge-status badge-low-stock">Live Output</span>
+                </div>
+                <div class="card-body">
+                  <div class="table-responsive">
+                    <table class="clinical-table">
+                      <thead>
+                        <tr>
+                          <th>Medicine</th>
+                          <th>Batch #</th>
+                          <th>Current Stock</th>
+                          <th>Reorder Level</th>
+                          <th>Condition</th>
+                        </tr>
+                      </thead>
+                      <tbody id="report-lowstock-tbody">
+                        <!-- Injected via JavaScript -->
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Stored Procedure 2: GetExpiryReport() -->
+            <div class="dash-column">
+              <div class="content-card">
+                <div class="card-header">
+                  <h3>
+                    <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                    Procedure: CALL GetExpiryReport()
+                  </h3>
+                  <span class="badge-status badge-critical">Live Output</span>
+                </div>
+                <div class="card-body">
+                  <div class="table-responsive">
+                    <table class="clinical-table">
+                      <thead>
+                        <tr>
+                          <th>Medicine</th>
+                          <th>Batch #</th>
+                          <th>Expiry Date</th>
+                          <th>Stock Units</th>
+                          <th>Action Required</th>
+                        </tr>
+                      </thead>
+                      <tbody id="report-expiry-tbody">
+                        <!-- Injected via JavaScript -->
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+        </section>
+
+      </main>
+
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       MODAL 1: ADD MEDICINE & BATCH
+       ===================================================================== -->
+  <div class="modal-overlay" id="modal-add-medicine">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>
+          <svg style="width:20px; height:20px; stroke:var(--primary); fill:none; stroke-width:2;" viewBox="0 0 24 24"><path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"></path></svg>
+          Register Medicine & Batch
+        </h3>
+        <button class="modal-close-btn">&times;</button>
+      </div>
+
+      <form id="form-add-medicine">
+        <div class="modal-body">
+          <div style="font-size:0.75rem; text-transform:uppercase; font-weight:700; color:var(--text-muted); margin-bottom:12px;">
+            1. Medicine Master Record
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="new-med-name">Medicine Brand Name *</label>
+              <input type="text" id="new-med-name" placeholder="e.g. Augmentin 625mg" required>
+            </div>
+            <div class="form-group">
+              <label for="new-med-generic">Generic Formulation</label>
+              <input type="text" id="new-med-generic" placeholder="e.g. Amoxicillin + Clavulanic Acid">
+            </div>
+            <div class="form-group">
+              <label for="new-med-category">Category *</label>
+              <select id="new-med-category" required></select>
+            </div>
+            <div class="form-group">
+              <label for="new-med-form">Dosage Form</label>
+              <select id="new-med-form">
+                <option value="Tablet">Tablet</option>
+                <option value="Capsule">Capsule</option>
+                <option value="Syrup">Syrup</option>
+                <option value="Injection">Injection</option>
+                <option value="Ointment">Ointment</option>
+              </select>
+            </div>
+            <div class="form-group col-span-2">
+              <label for="new-med-dosage">Dosage Strength</label>
+              <input type="text" id="new-med-dosage" placeholder="e.g. 500mg or 5ml / 125mg">
+            </div>
+          </div>
+
+          <div style="font-size:0.75rem; text-transform:uppercase; font-weight:700; color:var(--text-muted); margin: 20px 0 12px; padding-top:16px; border-top:1px solid var(--border-light);">
+            2. Initial Batch & Stock Details
+          </div>
+
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="new-batch-number">Batch Number *</label>
+              <input type="text" id="new-batch-number" placeholder="e.g. BATCH-AUG-991" required>
+            </div>
+            <div class="form-group">
+              <label for="new-batch-expiry">Expiry Date *</label>
+              <input type="date" id="new-batch-expiry" required>
+            </div>
+            <div class="form-group">
+              <label for="new-batch-purchase">Purchase Unit Price ($)</label>
+              <input type="number" step="0.01" id="new-batch-purchase" placeholder="4.50" required>
+            </div>
+            <div class="form-group">
+              <label for="new-batch-selling">Selling Unit Price ($)</label>
+              <input type="number" step="0.01" id="new-batch-selling" placeholder="7.00" required>
+            </div>
+            <div class="form-group">
+              <label for="new-batch-stock">Stock Units *</label>
+              <input type="number" id="new-batch-stock" placeholder="100" required>
+            </div>
+            <div class="form-group">
+              <label for="new-batch-reorder">Low Stock Alert Level</label>
+              <input type="number" id="new-batch-reorder" placeholder="20" value="20" required>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline btn-modal-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save to Inventory</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       MODAL 2: RECORD SALE / DISPENSE (POS)
+       ===================================================================== -->
+  <div class="modal-overlay" id="modal-record-sale">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>
+          <svg style="width:20px; height:20px; stroke:var(--primary); fill:none; stroke-width:2;" viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
+          Record Dispensary Sale / Billing
+        </h3>
+        <button class="modal-close-btn">&times;</button>
+      </div>
+
+      <form id="form-record-sale">
+        <div class="modal-body">
+          <div class="form-grid single-col">
+            
+            <div class="form-group">
+              <label for="sale-patient-select">Customer / Patient</label>
+              <select id="sale-patient-select"></select>
+            </div>
+
+            <div class="form-group">
+              <label for="sale-batch-select">Dispense Medicine Batch *</label>
+              <select id="sale-batch-select" required></select>
+            </div>
+
+            <div class="form-group">
+              <label for="sale-quantity-input">Quantity to Dispense *</label>
+              <input type="number" id="sale-quantity-input" min="1" value="1" required>
+              <div id="sale-stock-warning" style="font-size:0.78rem; font-weight:600; margin-top:3px;"></div>
+            </div>
+
+            <div class="form-group">
+              <label for="sale-payment-method">Payment Method</label>
+              <select id="sale-payment-method">
+                <option value="Cash">Cash</option>
+                <option value="UPI">UPI</option>
+                <option value="Card">Debit / Credit Card</option>
+              </select>
+            </div>
+
+            <!-- Bill Breakdown Card -->
+            <div style="background-color:#f8fafc; border:1px solid var(--border); border-radius:var(--radius-md); padding:16px; margin-top:8px;">
+              <div style="display:flex; justify-content:space-between; margin-bottom:6px; font-size:0.85rem;">
+                <span style="color:var(--text-muted);">Unit Price:</span>
+                <span id="sale-unit-price-display" style="font-weight:600;">$0.00</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; font-size:1.05rem; font-weight:800; border-top:1px dashed var(--border); padding-top:8px;">
+                <span>Total Amount:</span>
+                <span id="sale-subtotal-display" style="color:var(--primary);">$0.00</span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline btn-modal-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary">Confirm & Print Bill</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Vanilla JavaScript Logic -->
+  <script src="js/app.js"></script>
+</body>
+</html>
