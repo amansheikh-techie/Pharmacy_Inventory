@@ -164,6 +164,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initSearchAndFilters();
   initModalsAndForms();
   refreshAllViews();
+  fetchLiveMedicines(); // Phase 3C: Fetch real medicines from MySQL
 });
 
 // Sidebar Navigation
@@ -184,6 +185,11 @@ function initNavigation() {
 
       const activeSec = document.getElementById(`view-${targetView}`);
       if (activeSec) activeSec.classList.add("active");
+
+      // Phase 3C: When navigating to medicines tab, fetch latest records from MySQL
+      if (targetView === "medicines") {
+        fetchLiveMedicines();
+      }
     });
   });
 
@@ -428,25 +434,114 @@ function renderMedicinesTable() {
   const tbody = document.getElementById("medicines-table-tbody");
   if (!tbody) return;
 
+// =====================================================================
+// Phase 3C: Live MySQL Medicines State & Fetcher
+// =====================================================================
+let liveMedicines = [];
+let isMedicinesLoading = false;
+let medicinesApiError = null;
+
+async function fetchLiveMedicines() {
+  isMedicinesLoading = true;
+  medicinesApiError = null;
+  renderMedicinesTable();
+
+  try {
+    const res = await fetch('/api/medicines');
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: Failed to reach API`);
+    }
+    const json = await res.json();
+    liveMedicines = json.data || [];
+    isMedicinesLoading = false;
+    renderMedicinesTable();
+    populateLiveCategoryFilter();
+  } catch (err) {
+    console.error('Phase 3C API Error:', err);
+    isMedicinesLoading = false;
+    medicinesApiError = err.message || 'Network / Database Error';
+    renderMedicinesTable();
+  }
+}
+
+function populateLiveCategoryFilter() {
+  const catFilter = document.getElementById("medicine-category-filter");
+  if (!catFilter || liveMedicines.length === 0) return;
+
+  // Extract unique categories from live medicines
+  const categoriesMap = new Map();
+  liveMedicines.forEach(m => {
+    if (m.categoryId && m.categoryName) {
+      categoriesMap.set(m.categoryId, m.categoryName);
+    }
+  });
+
+  const currentVal = catFilter.value;
+  catFilter.innerHTML = `<option value="">All Categories</option>` +
+    Array.from(categoriesMap.entries()).map(([id, name]) => `<option value="${id}">${name}</option>`).join("");
+  catFilter.value = currentVal;
+}
+
+// Medicines Master Table with Live MySQL Integration (Phase 3C)
+function renderMedicinesTable() {
+  const tbody = document.getElementById("medicines-table-tbody");
+  if (!tbody) return;
+
+  const countDisplay = document.getElementById("medicine-count-display");
+
+  // State 1: Loading from MySQL API
+  if (isMedicinesLoading) {
+    if (countDisplay) countDisplay.textContent = "Connecting to MySQL...";
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="8" class="empty-table-state">
+          <div class="pulse-dot" style="margin:0 auto 12px; width:16px; height:16px;"></div>
+          <div class="empty-table-title">Querying MySQL Database...</div>
+          <div class="empty-table-sub">Fetching real medicine records from <code>pharmacy_db.medicine</code></div>
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  // State 2: Error when API / MySQL fails (Never show fake medicines)
+  if (medicinesApiError) {
+    if (countDisplay) countDisplay.textContent = "Connection Error";
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="8" class="empty-table-state">
+          <svg viewBox="0 0 24 24" fill="none" style="stroke:var(--danger);"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+          <div class="empty-table-title" style="color:var(--danger);">Unable to Load Medicines from API</div>
+          <div class="empty-table-sub">The database or backend API is unreachable (${medicinesApiError}).</div>
+          <button class="btn btn-primary btn-sm" onclick="fetchLiveMedicines()" style="margin-top:14px;">
+            🔄 Retry Connection
+          </button>
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  // State 3: Filter Live MySQL Records
   const searchInput = document.getElementById("medicine-search-input");
   const categoryFilter = document.getElementById("medicine-category-filter");
-  const countDisplay = document.getElementById("medicine-count-display");
 
   const query = searchInput ? searchInput.value.toLowerCase().trim() : "";
   const selectedCat = categoryFilter ? categoryFilter.value : "";
 
-  let filtered = MockDB.medicines.filter(med => {
-    const matchesSearch = query === "" || 
-      med.name.toLowerCase().includes(query) || 
-      med.generic.toLowerCase().includes(query);
-    const matchesCat = selectedCat === "" || med.categoryId.toString() === selectedCat;
+  let filtered = liveMedicines.filter(med => {
+    const medName = (med.name || "").toLowerCase();
+    const manufacturer = (med.manufacturer || "").toLowerCase();
+    const matchesSearch = query === "" || medName.includes(query) || manufacturer.includes(query);
+    const matchesCat = selectedCat === "" || (med.categoryId && med.categoryId.toString() === selectedCat);
     return matchesSearch && matchesCat;
   });
 
   if (countDisplay) {
-    countDisplay.textContent = `Showing ${filtered.length} of ${MockDB.medicines.length} medicines`;
+    countDisplay.textContent = `Showing ${filtered.length} of ${liveMedicines.length} live medicines from MySQL`;
   }
 
+  // State 4: Empty search / filter results
   if (filtered.length === 0) {
     tbody.innerHTML = `
       <tr>
@@ -460,15 +555,15 @@ function renderMedicinesTable() {
     return;
   }
 
+  // State 5: Render real MySQL rows
   tbody.innerHTML = filtered.map(med => {
-    const cat = MockDB.categories.find(c => c.id === med.categoryId);
-    const totalStock = getMedicineTotalStock(med.id);
-    const medBatches = MockDB.batches.filter(b => b.medicineId === med.id);
+    const totalStock = parseInt(med.totalStock, 10) || 0;
+    const batchCount = parseInt(med.batchCount, 10) || 0;
     
     let statusBadge = `<span class="badge-status badge-in-stock">In Stock (${totalStock})</span>`;
     if (totalStock === 0) {
       statusBadge = `<span class="badge-status badge-expired">Out of Stock</span>`;
-    } else if (medBatches.some(b => b.stock <= b.reorderLevel)) {
+    } else if (totalStock <= 30) {
       statusBadge = `<span class="badge-status badge-low-stock">Low Stock (${totalStock})</span>`;
     }
 
@@ -477,22 +572,19 @@ function renderMedicinesTable() {
         <td><span class="font-mono">#MED-${med.id}</span></td>
         <td>
           <strong>${med.name}</strong>
-          <div style="font-size:0.75rem; color:var(--text-muted);">${med.generic}</div>
+          <div style="font-size:0.75rem; color:var(--text-muted);">Mfr: ${med.manufacturer || 'Standard'}</div>
         </td>
-        <td><span class="badge-status badge-info">${cat ? cat.name : 'Uncategorized'}</span></td>
-        <td>${med.form} (${med.dosage})</td>
+        <td><span class="badge-status badge-info">${med.categoryName || 'General'}</span></td>
+        <td>Clinical Formulation</td>
         <td><strong>${totalStock} units</strong></td>
-        <td>${medBatches.length} batch(es)</td>
+        <td>${batchCount} batch(es)</td>
         <td>${statusBadge}</td>
         <td>
           <div class="action-btn-group">
             <button class="btn btn-outline btn-sm" onclick="openViewMedicineModal(${med.id})" title="View Details">
               View
             </button>
-            <button class="btn btn-outline btn-sm" onclick="openEditMedicineModal(${med.id})" title="Edit Medicine">
-              Edit
-            </button>
-            <button class="btn btn-primary btn-sm" onclick="switchView('batches', ${med.id})" title="View Batches">
+            <button class="btn btn-primary btn-sm" onclick="switchView('batches')" title="View Batches">
               Batches
             </button>
           </div>
@@ -1081,21 +1173,22 @@ function saveNewMedicineAndBatch() {
   showToast(`Medicine "${name}" and Batch #${batchNumber} added successfully to inventory!`, "success");
 }
 
-// Action: View Medicine Formulation Details
+// Action: View Medicine Formulation Details (Phase 3C)
 function openViewMedicineModal(medId) {
-  const med = MockDB.medicines.find(m => m.id === medId);
+  const liveMed = liveMedicines.find(m => m.id === medId);
+  const mockMed = MockDB.medicines.find(m => m.id === medId);
+  const med = liveMed || mockMed;
   if (!med) return;
 
-  const cat = MockDB.categories.find(c => c.id === med.categoryId);
-  const totalStock = getMedicineTotalStock(med.id);
+  const totalStock = med.totalStock !== undefined ? med.totalStock : getMedicineTotalStock(med.id);
   const batches = MockDB.batches.filter(b => b.medicineId === med.id);
 
   document.getElementById("view-med-name").textContent = med.name;
-  document.getElementById("view-med-generic").textContent = med.generic;
-  document.getElementById("view-med-category").textContent = cat ? cat.name : "Uncategorized";
-  document.getElementById("view-med-form").textContent = `${med.form} (${med.dosage})`;
+  document.getElementById("view-med-generic").textContent = med.generic || (med.manufacturer ? `Manufacturer: ${med.manufacturer}` : med.name);
+  document.getElementById("view-med-category").textContent = med.categoryName || "General";
+  document.getElementById("view-med-form").textContent = med.form ? `${med.form} (${med.dosage || 'Standard'})` : "Clinical Formulation";
   document.getElementById("view-med-stock").textContent = `${totalStock} units`;
-  document.getElementById("view-med-batches-count").textContent = `${batches.length} batch(es)`;
+  document.getElementById("view-med-batches-count").textContent = `${med.batchCount || batches.length} batch(es)`;
 
   const editBtn = document.getElementById("btn-view-med-edit");
   if (editBtn) editBtn.setAttribute("data-medicine-id", med.id);
@@ -1103,7 +1196,7 @@ function openViewMedicineModal(medId) {
   const tbody = document.getElementById("view-med-batches-tbody");
   if (tbody) {
     if (batches.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding:16px;">No batches registered for this medicine.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding:16px;">Active batch records linked in MySQL <code>medicinebatch</code> table.</td></tr>`;
     } else {
       tbody.innerHTML = batches.map(b => {
         const status = getBatchStatus(b);

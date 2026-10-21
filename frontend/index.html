@@ -120,14 +120,14 @@
       <!-- Content Area -->
       <main class="content-area">
 
-        <!-- Phase 2B: In-Memory Sample Data Label Banner -->
+        <!-- Phase 3C: Live Database Connected Banner -->
         <div class="demo-mode-banner">
           <div style="display:flex; align-items:center; gap:8px;">
-            <span class="demo-mode-badge">Phase 2B Demo</span>
-            <span><strong>Interactive Frontend Simulation Mode:</strong> Using in-memory sample clinical data. Changes update tables and dashboard counters in real time. (Database sync active in Phase 3).</span>
+            <span class="demo-mode-badge" style="background:var(--primary);">Phase 3C Active</span>
+            <span><strong>Live Database Connected:</strong> Medicines are fetched in real-time from MySQL <code>pharmacy_db</code> via <code>GET /api/medicines</code>.</span>
           </div>
-          <button class="btn btn-outline btn-sm" id="btn-reset-demo-data" style="background:#ffffff; border-color:#a7f3d0; font-size:0.75rem;">
-            Reset Sample Data
+          <button class="btn btn-outline btn-sm" onclick="fetchLiveMedicines()" style="background:#ffffff; border-color:#a7f3d0; font-size:0.75rem;">
+            🔄 Refresh From Database
           </button>
         </div>
         

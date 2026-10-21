@@ -28,6 +28,12 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // =====================================================================
+// API Routes
+// =====================================================================
+const medicineRoutes = require('./routes/medicineRoutes');
+app.use('/api/medicines', medicineRoutes);
+
+// =====================================================================
 // API Health-Check Endpoint (GET /api/health)
 // Returns system status and tests real MySQL connectivity
 // =====================================================================
