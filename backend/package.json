@@ -5,10 +5,14 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test-db": "node test_db_connection.js",
-    "test:db": "node test_db_connection.js",
-    "test:api": "node test_medicine_api.js",
-    "test": "node test_medicine_api.js"
+    "test": "node test_all_workflows.js",
+    "test:all": "node test_all_workflows.js",
+    "test:reports": "node test_dashboard_reports_api.js",
+    "test:medicine": "node test_medicine_api.js",
+    "test:sales": "node test_sales_api.js",
+    "test:prescriptions": "node test_prescription_api.js",
+    "test:patients": "node test_patient_doctor_api.js",
+    "test:db": "node test_db_connection.js"
   },
   "dependencies": {
     "cors": "^2.8.6",
