@@ -119,6 +119,9 @@ Open your browser at:
 ### 6. Run Automated Test Suites
 Run the comprehensive automated test suites to verify database integrity, stored procedures, triggers, and APIs:
 ```bash
+# 14 Essential Workflows End-to-End Verification
+node backend/test_all_workflows.js
+
 # Dashboard & Reports Verification (Phase 5A)
 node backend/test_dashboard_reports_api.js
 
