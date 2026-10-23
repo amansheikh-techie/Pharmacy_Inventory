@@ -7,6 +7,7 @@ const http = require('http');
 const express = require('express');
 const medicineRoutes = require('./routes/medicineRoutes');
 const batchRoutes = require('./routes/batchRoutes');
+const reportRoutes = require('./routes/reportRoutes');
 const { pool } = require('./db');
 
 // Set up isolated Express test server
@@ -14,6 +15,7 @@ const app = express();
 app.use(express.json());
 app.use('/api/medicines', medicineRoutes);
 app.use('/api/batches', batchRoutes);
+app.use('/api/reports', reportRoutes);
 
 let server;
 let baseUrl;
@@ -317,6 +319,98 @@ async function runTests() {
     const deleteBatchRes = await request('DELETE', `/api/batches/${createdBatchId}`);
     assert(deleteBatchRes.status === 200, 'Deletes test batch with 200 OK');
     assert(deleteBatchRes.body.success === true, 'Returns success: true on delete');
+
+    // -----------------------------------------------------------------
+    // TEST 20: GET /api/reports/low-stock - Stored procedure GetLowStock()
+    // -----------------------------------------------------------------
+    console.log('\n--- 20. Testing GET /api/reports/low-stock: GetLowStock() ---');
+    const lowStockRes = await request('GET', '/api/reports/low-stock');
+    assert(lowStockRes.status === 200, 'GET /api/reports/low-stock returns 200 OK');
+    assert(lowStockRes.body.success === true, 'Response body has success: true');
+    assert(Array.isArray(lowStockRes.body.data), 'Low stock data is an array');
+    assert(lowStockRes.body.threshold === 30, 'Report threshold matches schema < 30 units');
+    // Antiseptic Ointment (OIN101) has 25 units (< 30)
+    const oinMatch = lowStockRes.body.data.find(b => b.batchNumber === 'OIN101');
+    assert(Boolean(oinMatch), 'GetLowStock identifies OIN101 (quantity 25 < 30)');
+    if (oinMatch) {
+      assert(oinMatch.stock === 25, 'Identified low stock batch has 25 units');
+    }
+
+    // -----------------------------------------------------------------
+    // TEST 21: GET /api/reports/expiry - Stored procedure GetExpiryReport()
+    // -----------------------------------------------------------------
+    console.log('\n--- 21. Testing GET /api/reports/expiry: GetExpiryReport() ---');
+    const expiryReportRes = await request('GET', '/api/reports/expiry');
+    assert(expiryReportRes.status === 200, 'GET /api/reports/expiry returns 200 OK');
+    assert(expiryReportRes.body.success === true, 'Response body has success: true');
+    assert(Array.isArray(expiryReportRes.body.data), 'Expiry report data is an array');
+
+    // Test expiry status logic: Create a temporary test batch expiring in 15 days
+    // to test expiring-soon classification, and one expired in past
+    const expiringSoonNumber = `EXPSOON-${Date.now().toString().slice(-5)}`;
+    const postSoonBatch = await request('POST', '/api/batches', {
+      medicineId: 1, // Paracetamol
+      batchNumber: expiringSoonNumber,
+      quantity: 50,
+      unitPrice: 3.50,
+      expiryDate: new Date(Date.now() + 15 * 86400000).toISOString().slice(0, 10)
+    });
+    assert(postSoonBatch.status === 201, 'Creates batch expiring in 15 days');
+    const soonBatchId = postSoonBatch.body.data.id;
+
+    // Check expiry report now includes the expiring soon batch
+    const updatedExpiryRes = await request('GET', '/api/reports/expiry');
+    const soonItem = updatedExpiryRes.body.data.find(b => b.batchNumber === expiringSoonNumber);
+    assert(Boolean(soonItem), 'GetExpiryReport includes batch expiring in 15 days');
+    if (soonItem) {
+      assert(soonItem.isExpired === false, 'Batch expiring in 15 days is NOT labeled as expired');
+      assert(soonItem.badgeType === 'warning', 'Badge type is warning (expiring soon)');
+      assert(soonItem.daysRemaining >= 14 && soonItem.daysRemaining <= 16, 'Days remaining calculated accurately');
+    }
+
+    // Clean up temporary soon batch
+    await request('DELETE', `/api/batches/${soonBatchId}`);
+
+    // -----------------------------------------------------------------
+    // TEST 22: PUT /api/batches/:id - Stock integrity protection on sold batches
+    // -----------------------------------------------------------------
+    console.log('\n--- 22. Testing Stock Integrity Protection on Batch with Sales ---');
+    // Batch 1 (PAR101) has completed sales recorded in saleitem
+    const attemptQtyOverrideRes = await request('PUT', '/api/batches/1', {
+      quantity: 999
+    });
+    assert(attemptQtyOverrideRes.status === 409, 'Rejects arbitrary quantity override on sold batch with 409 Conflict');
+    assert(attemptQtyOverrideRes.body.success === false, 'Returns success: false');
+    assert(attemptQtyOverrideRes.body.error.includes('Stock integrity protection'), 'Error explains stock integrity requirement');
+    assert(attemptQtyOverrideRes.body.details.reconciliationRequired === true, 'Identifies reconciliation workflow required');
+
+    // Updating non-quantity fields (e.g. unitPrice) on sold batch is permitted
+    const allowPriceUpdateRes = await request('PUT', '/api/batches/1', {
+      unitPrice: 2.50
+    });
+    assert(allowPriceUpdateRes.status === 200, 'Permits unitPrice update on sold batch');
+
+    // -----------------------------------------------------------------
+    // TEST 23: Database Triggers Preservation Verification
+    // -----------------------------------------------------------------
+    console.log('\n--- 23. Verifying Stock Triggers Intact in MySQL ---');
+    const [activeTriggers] = await pool.query(
+      'SELECT TRIGGER_NAME, EVENT_OBJECT_TABLE FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = "pharmacy_db"'
+    );
+    const triggerNames = activeTriggers.map(t => t.TRIGGER_NAME.toLowerCase());
+    assert(triggerNames.includes('check_sale_stock'), 'Trigger check_sale_stock is active in MySQL');
+    assert(triggerNames.includes('after_saleitem_insert'), 'Trigger after_saleitem_insert is active in MySQL');
+
+    // -----------------------------------------------------------------
+    // TEST 24: Stored Procedures Preservation Verification
+    // -----------------------------------------------------------------
+    console.log('\n--- 24. Verifying Stored Procedures Intact in MySQL ---');
+    const [activeRoutines] = await pool.query(
+      'SELECT ROUTINE_NAME FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = "pharmacy_db"'
+    );
+    const routineNames = activeRoutines.map(r => r.ROINE_NAME ? r.ROINE_NAME.toLowerCase() : r.ROUTINE_NAME.toLowerCase());
+    assert(routineNames.includes('getlowstock'), 'Stored procedure GetLowStock is registered');
+    assert(routineNames.includes('getexpiryreport'), 'Stored procedure GetExpiryReport is registered');
 
   } catch (err) {
     console.error('Unexpected test error:', err);

@@ -393,7 +393,7 @@ router.put('/:id', async (req, res) => {
       }
     }
 
-    // Validate quantity
+    // Validate quantity and enforce stock integrity protection
     let updatedQty = current.quantity;
     const rawQty = quantity !== undefined ? quantity : stock;
     if (rawQty !== undefined) {
@@ -401,6 +401,29 @@ router.put('/:id', async (req, res) => {
       if (isNaN(parsedQty) || parsedQty < 0) {
         return res.status(400).json({ success: false, error: 'Quantity must be a non-negative integer.' });
       }
+
+      // If quantity is being modified, verify if historical sales transactions exist
+      if (parsedQty !== current.quantity) {
+        const [sales] = await pool.query(
+          'SELECT COUNT(*) AS saleCount, COALESCE(SUM(quantity), 0) AS totalSold FROM saleitem WHERE batch_id = ?',
+          [batchId]
+        );
+
+        if (sales[0].saleCount > 0) {
+          return res.status(409).json({
+            success: false,
+            error: `Stock integrity protection: Direct quantity override is disabled for batch #${current.batch_number} because it has ${sales[0].saleCount} completed sales transaction(s) totaling ${sales[0].totalSold} units. Arbitrary quantity changes conflict with sales audit trails and automated stock triggers. Safe quantity adjustments require an approved inventory reconciliation workflow.`,
+            details: {
+              currentStock: current.quantity,
+              requestedStock: parsedQty,
+              completedSalesCount: sales[0].saleCount,
+              totalUnitsSold: sales[0].totalSold,
+              reconciliationRequired: true
+            }
+          });
+        }
+      }
+
       updatedQty = parsedQty;
     }
 

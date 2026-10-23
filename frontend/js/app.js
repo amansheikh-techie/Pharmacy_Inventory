@@ -167,6 +167,7 @@ document.addEventListener("DOMContentLoaded", () => {
   fetchLiveCategories(); // Phase 3D: Fetch real categories from MySQL
   fetchLiveMedicines(); // Phase 3C: Fetch real medicines from MySQL
   fetchLiveBatches(); // Phase 3D: Fetch real inventory batches from MySQL
+  fetchLiveReports(); // Phase 4B: Fetch stored procedure reports from MySQL
 });
 
 // Sidebar Navigation
@@ -188,11 +189,13 @@ function initNavigation() {
       const activeSec = document.getElementById(`view-${targetView}`);
       if (activeSec) activeSec.classList.add("active");
 
-      // Phase 3C & 3D: Refresh live records when navigating tabs
+      // Phase 3C, 3D & 4B: Refresh live records when navigating tabs
       if (targetView === "medicines") {
         fetchLiveMedicines();
       } else if (targetView === "batches") {
         fetchLiveBatches();
+      } else if (targetView === "reports") {
+        fetchLiveReports();
       }
     });
   });
@@ -448,15 +451,47 @@ function renderMedicinesTable() {
   if (!tbody) return;
 
 // =====================================================================
-// Phase 3C & 3D: Live MySQL Medicines & Categories State & Fetchers
+// Phase 3C, 3D & 4B: Live MySQL State & Fetchers
 // =====================================================================
 let liveMedicines = [];
 let liveCategories = [];
 let liveBatches = [];
+let liveReports = { lowStock: [], expiry: [] };
 let isMedicinesLoading = false;
 let medicinesApiError = null;
 let isBatchesLoading = false;
 let batchesApiError = null;
+let isReportsLoading = false;
+let reportsApiError = null;
+
+async function fetchLiveReports() {
+  isReportsLoading = true;
+  reportsApiError = null;
+  renderReportsView();
+
+  try {
+    const [lowStockRes, expiryRes] = await Promise.all([
+      fetch('/api/reports/low-stock'),
+      fetch('/api/reports/expiry')
+    ]);
+
+    if (!lowStockRes.ok) throw new Error(`HTTP ${lowStockRes.status}: Failed to reach Low Stock API`);
+    if (!expiryRes.ok) throw new Error(`HTTP ${expiryRes.status}: Failed to reach Expiry API`);
+
+    const lowStockJson = await lowStockRes.json();
+    const expiryJson = await expiryRes.json();
+
+    liveReports.lowStock = lowStockJson.data || (Array.isArray(lowStockJson) ? lowStockJson : []);
+    liveReports.expiry = expiryJson.data || (Array.isArray(expiryJson) ? expiryJson : []);
+    isReportsLoading = false;
+    renderReportsView();
+  } catch (err) {
+    console.error('Reports API Error:', err);
+    isReportsLoading = false;
+    reportsApiError = err.message || 'Database / Stored Procedure Error';
+    renderReportsView();
+  }
+}
 
 async function fetchLiveBatches() {
   isBatchesLoading = true;
@@ -1011,46 +1046,130 @@ function renderDoctorsTable() {
   `).join("");
 }
 
-// Stored Procedures Simulation Reports
+// Stored Procedures Live Reports (Phase 4B: MySQL CALL GetLowStock() & CALL GetExpiryReport())
 function renderReportsView() {
   const lowStockTable = document.getElementById("report-lowstock-tbody");
   const expiryTable = document.getElementById("report-expiry-tbody");
 
+  // State 1: Loading from MySQL Stored Procedures
+  if (isReportsLoading) {
+    const loadingHtml = `
+      <tr>
+        <td colspan="5" class="empty-table-state">
+          <div class="pulse-dot" style="margin:0 auto 12px; width:16px; height:16px;"></div>
+          <div class="empty-table-title">Executing Stored Procedure...</div>
+          <div class="empty-table-sub">Querying MySQL database routines in <code>pharmacy_db</code></div>
+        </td>
+      </tr>
+    `;
+    if (lowStockTable) lowStockTable.innerHTML = loadingHtml;
+    if (expiryTable) expiryTable.innerHTML = loadingHtml;
+    return;
+  }
+
+  // State 2: Error when Stored Procedure / API fails
+  if (reportsApiError) {
+    const errorHtml = `
+      <tr>
+        <td colspan="5" class="empty-table-state">
+          <svg viewBox="0 0 24 24" fill="none" style="stroke:var(--danger);"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+          <div class="empty-table-title" style="color:var(--danger);">Stored Procedure Call Failed</div>
+          <div class="empty-table-sub">${reportsApiError}</div>
+          <button class="btn btn-primary btn-sm" onclick="fetchLiveReports()" style="margin-top:14px;">
+            🔄 Retry Stored Procedures
+          </button>
+        </td>
+      </tr>
+    `;
+    if (lowStockTable) lowStockTable.innerHTML = errorHtml;
+    if (expiryTable) expiryTable.innerHTML = errorHtml;
+    return;
+  }
+
+  // Procedure 1 Output: CALL GetLowStock() (Threshold: < 30 units)
   if (lowStockTable) {
-    const lowStock = MockDB.batches.filter(b => b.stock <= b.reorderLevel);
-    if (lowStock.length === 0) {
-      lowStockTable.innerHTML = `<tr><td colspan="5" class="empty-table-state"><div class="empty-table-title">No Low Stock Items</div></td></tr>`;
+    const items = liveReports.lowStock;
+    if (!items || items.length === 0) {
+      lowStockTable.innerHTML = `
+        <tr>
+          <td colspan="5" class="empty-table-state">
+            <svg viewBox="0 0 24 24" fill="none" style="stroke:var(--success);"><circle cx="12" cy="12" r="10"></circle><polyline points="9 11 12 14 22 4"></polyline></svg>
+            <div class="empty-table-title">Optimal Stock Levels</div>
+            <div class="empty-table-sub">All active medication batches in MySQL meet or exceed the reorder threshold (&ge; 30 units).</div>
+          </td>
+        </tr>
+      `;
     } else {
-      lowStockTable.innerHTML = lowStock.map(b => {
-        const med = MockDB.medicines.find(m => m.id === b.medicineId);
+      lowStockTable.innerHTML = items.map(b => {
+        const stock = parseInt(b.stock, 10);
+        const reorderLevel = b.reorderLevel || 30;
+        const isCritical = stock < 15;
+
         return `
           <tr>
-            <td>${med ? med.name : 'Unknown'}</td>
+            <td><strong>${b.medicineName}</strong></td>
             <td><span class="font-mono">${b.batchNumber}</span></td>
-            <td><strong>${b.stock} units</strong></td>
-            <td>${b.reorderLevel} units</td>
-            <td><span class="badge-status badge-critical">Below Minimum</span></td>
+            <td><strong style="color:${isCritical ? 'var(--danger)' : 'var(--warning)'};">${stock} units</strong></td>
+            <td>${reorderLevel} units</td>
+            <td>
+              <span class="badge-status ${isCritical ? 'badge-critical' : 'badge-low-stock'}">
+                ${isCritical ? 'Critical (< 15)' : 'Below Threshold (< 30)'}
+              </span>
+            </td>
           </tr>
         `;
       }).join("");
     }
   }
 
+  // Procedure 2 Output: CALL GetExpiryReport() (90-day window)
   if (expiryTable) {
-    const expiringBatches = MockDB.batches.filter(b => getDaysUntil(b.expiryDate) <= 60);
-    if (expiringBatches.length === 0) {
-      expiryTable.innerHTML = `<tr><td colspan="5" class="empty-table-state"><div class="empty-table-title">No Batches Expiring in Next 60 Days</div></td></tr>`;
+    const items = liveReports.expiry;
+    if (!items || items.length === 0) {
+      expiryTable.innerHTML = `
+        <tr>
+          <td colspan="5" class="empty-table-state">
+            <svg viewBox="0 0 24 24" fill="none" style="stroke:var(--success);"><circle cx="12" cy="12" r="10"></circle><polyline points="9 11 12 14 22 4"></polyline></svg>
+            <div class="empty-table-title">No Near-Expiry Batches</div>
+            <div class="empty-table-sub">No batches in MySQL have expiration dates within the 90-day procedure window.</div>
+          </td>
+        </tr>
+      `;
     } else {
-      expiryTable.innerHTML = expiringBatches.map(b => {
-        const med = MockDB.medicines.find(m => m.id === b.medicineId);
-        const days = getDaysUntil(b.expiryDate);
+      expiryTable.innerHTML = items.map(b => {
+        const days = b.daysRemaining;
+        const isExpired = b.isExpired;
+
+        let badgeClass = "badge-in-stock";
+        let statusText = "";
+        let actionBadge = "";
+
+        if (isExpired) {
+          badgeClass = "badge-expired";
+          statusText = `EXPIRED (${Math.abs(days)}d ago)`;
+          actionBadge = `<span style="color:var(--danger); font-weight:600; font-size:0.8rem;">🚨 Quarantine & Dispose</span>`;
+        } else if (days <= 30) {
+          badgeClass = "badge-low-stock";
+          statusText = `Expiring Soon (${days}d left)`;
+          actionBadge = `<span style="color:var(--warning); font-weight:600; font-size:0.8rem;">⚡ Priority FEFO Dispense</span>`;
+        } else {
+          badgeClass = "badge-info";
+          statusText = `Approaching (${days}d left)`;
+          actionBadge = `<span style="color:var(--text-muted); font-size:0.8rem;">👁️ Routine Monitor</span>`;
+        }
+
         return `
           <tr>
-            <td>${med ? med.name : 'Unknown'}</td>
+            <td><strong>${b.medicineName}</strong></td>
             <td><span class="font-mono">${b.batchNumber}</span></td>
-            <td>${b.expiryDate}</td>
+            <td><strong>${b.expiryDate}</strong></td>
             <td>${b.stock} units</td>
-            <td><span class="badge-status ${days < 0 ? 'badge-expired' : 'badge-low-stock'}">${days < 0 ? 'EXPIRED' : `${days}d left`}</span></td>
+            <td>
+              <div style="display:flex; flex-direction:column; gap:4px; align-items:flex-start;">
+                <span class="badge-status ${badgeClass}">${statusText}</span>
+                ${actionBadge}
+              </div>
+            </td>
           </tr>
         `;
       }).join("");
@@ -1629,9 +1748,10 @@ async function saveNewBatch() {
     form.reset();
     showToast(`Batch #${batchNumber} saved to MySQL database successfully!`, "success");
 
-    // Refresh real batches & medicines from MySQL
+    // Refresh real batches, medicines & reports from MySQL
     await fetchLiveBatches();
     await fetchLiveMedicines();
+    await fetchLiveReports();
     refreshAllViews();
   } catch (err) {
     console.error("Error creating batch in MySQL:", err);
@@ -1735,9 +1855,10 @@ async function saveEditedBatch() {
     closeModal("modal-edit-batch");
     showToast(`Batch #${batchNumber} updated in MySQL successfully!`, "success");
 
-    // Refresh real batches & medicines from MySQL
+    // Refresh real batches, medicines & reports from MySQL
     await fetchLiveBatches();
     await fetchLiveMedicines();
+    await fetchLiveReports();
     refreshAllViews();
   } catch (err) {
     console.error("Error updating batch in MySQL:", err);
