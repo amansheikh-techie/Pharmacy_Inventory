@@ -33,9 +33,11 @@ app.use(express.urlencoded({ extended: true }));
 const medicineRoutes = require('./routes/medicineRoutes');
 const batchRoutes = require('./routes/batchRoutes');
 const reportRoutes = require('./routes/reportRoutes');
+const salesRoutes = require('./routes/salesRoutes');
 app.use('/api/medicines', medicineRoutes);
 app.use('/api/batches', batchRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/sales', salesRoutes);
 
 // =====================================================================
 // API Health-Check Endpoint (GET /api/health)

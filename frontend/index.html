@@ -120,14 +120,14 @@
       <!-- Content Area -->
       <main class="content-area">
 
-        <!-- Phase 3C: Live Database Connected Banner -->
+        <!-- Phase 4C: Live Database Connected Banner -->
         <div class="demo-mode-banner">
           <div style="display:flex; align-items:center; gap:8px;">
-            <span class="demo-mode-badge" style="background:var(--primary);">Phase 3C Active</span>
-            <span><strong>Live Database Connected:</strong> Medicines are fetched in real-time from MySQL <code>pharmacy_db</code> via <code>GET /api/medicines</code>.</span>
+            <span class="demo-mode-badge" style="background:var(--primary);">Phase 4C Active</span>
+            <span><strong>Live MySQL Dispensary Connected:</strong> Medicines, Batches, Stored Procedures, and Sales transactions run live on <code>pharmacy_db</code> with trigger-enforced stock deductions.</span>
           </div>
-          <button class="btn btn-outline btn-sm" onclick="fetchLiveMedicines()" style="background:#ffffff; border-color:#a7f3d0; font-size:0.75rem;">
-            🔄 Refresh From Database
+          <button class="btn btn-outline btn-sm" onclick="fetchLiveSales(); fetchLiveBatches(); fetchLiveMedicines(); fetchLiveReports();" style="background:#ffffff; border-color:#a7f3d0; font-size:0.75rem;">
+            🔄 Refresh All Live Data
           </button>
         </div>
         
@@ -827,6 +827,31 @@
           <button type="submit" class="btn btn-primary">Confirm & Print Bill</button>
         </div>
       </form>
+  </div>
+
+  <!-- =====================================================================
+       MODAL: VIEW INVOICE & RECEIPT (Phase 4C)
+       ===================================================================== -->
+  <div class="modal-overlay" id="modal-view-invoice">
+    <div class="modal-box" style="max-width: 650px;">
+      <div class="modal-header">
+        <h3>
+          <svg style="width:20px; height:20px; stroke:var(--primary); fill:none; stroke-width:2;" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+          Dispensary Sales Invoice
+        </h3>
+        <button class="modal-close-btn">&times;</button>
+      </div>
+
+      <div class="modal-body" id="invoice-modal-body">
+        <!-- Injected via JavaScript from MySQL GET /api/sales/:id -->
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline btn-modal-cancel">Close</button>
+        <button type="button" class="btn btn-primary" onclick="window.print()">
+          🖨️ Print Receipt
+        </button>
+      </div>
     </div>
   </div>
 

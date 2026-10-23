@@ -168,6 +168,8 @@ document.addEventListener("DOMContentLoaded", () => {
   fetchLiveMedicines(); // Phase 3C: Fetch real medicines from MySQL
   fetchLiveBatches(); // Phase 3D: Fetch real inventory batches from MySQL
   fetchLiveReports(); // Phase 4B: Fetch stored procedure reports from MySQL
+  fetchLiveSales(); // Phase 4C: Fetch real sales ledger from MySQL
+  fetchLivePatients(); // Phase 4C: Fetch real patients from MySQL
 });
 
 // Sidebar Navigation
@@ -189,13 +191,16 @@ function initNavigation() {
       const activeSec = document.getElementById(`view-${targetView}`);
       if (activeSec) activeSec.classList.add("active");
 
-      // Phase 3C, 3D & 4B: Refresh live records when navigating tabs
+      // Phase 3C, 3D, 4B & 4C: Refresh live records when navigating tabs
       if (targetView === "medicines") {
         fetchLiveMedicines();
       } else if (targetView === "batches") {
         fetchLiveBatches();
       } else if (targetView === "reports") {
         fetchLiveReports();
+      } else if (targetView === "sales") {
+        fetchLiveSales();
+        fetchLivePatients();
       }
     });
   });
@@ -382,25 +387,26 @@ function renderCriticalAlerts() {
   }).join("");
 }
 
-// Dashboard Recent Sales Table
+// Dashboard Recent Sales Table (Connected to live MySQL liveSales)
 function renderRecentSales() {
   const container = document.getElementById("dashboard-sales-tbody");
   if (!container) return;
 
-  if (MockDB.sales.length === 0) {
+  const sales = (liveSales.length > 0) ? liveSales : MockDB.sales;
+
+  if (sales.length === 0) {
     container.innerHTML = `<tr><td colspan="5" class="empty-table-state"><div class="empty-table-title">No Sales Recorded Yet</div><div class="empty-table-sub">Use 'New Dispense / Sale' to record a transaction.</div></td></tr>`;
     return;
   }
 
-  container.innerHTML = MockDB.sales.slice(-5).reverse().map(sale => {
-    const patient = MockDB.patients.find(p => p.id === sale.patientId);
+  container.innerHTML = sales.slice(0, 5).map(sale => {
     return `
       <tr>
-        <td><span class="font-mono">${sale.invoiceNumber}</span></td>
-        <td>${patient ? patient.name : 'Walk-in Customer'}</td>
-        <td>${sale.items.length} item(s)</td>
-        <td><strong>₹${sale.totalAmount.toFixed(2)}</strong></td>
-        <td><span class="badge-status badge-info">${sale.paymentMethod}</span></td>
+        <td><span class="font-mono font-bold">${sale.invoiceNumber}</span></td>
+        <td>${sale.patientName || 'Walk-in Customer'}</td>
+        <td>${sale.itemCount !== undefined ? `${sale.itemCount} item(s)` : `${sale.items?.length || 1} item(s)`}</td>
+        <td><strong style="color:var(--primary);">₹${parseFloat(sale.totalAmount).toFixed(2)}</strong></td>
+        <td><span class="badge-status badge-in-stock">Billed</span></td>
       </tr>
     `;
   }).join("");
@@ -445,24 +451,61 @@ function renderLowStockAlertList() {
   }).join("");
 }
 
-// Medicines Master Table with Search & Category Filter
-function renderMedicinesTable() {
-  const tbody = document.getElementById("medicines-table-tbody");
-  if (!tbody) return;
-
 // =====================================================================
-// Phase 3C, 3D & 4B: Live MySQL State & Fetchers
+// Phase 3C, 3D, 4B & 4C: Live MySQL State & Fetchers
 // =====================================================================
 let liveMedicines = [];
 let liveCategories = [];
 let liveBatches = [];
 let liveReports = { lowStock: [], expiry: [] };
+let liveSales = [];
+let livePatients = [];
 let isMedicinesLoading = false;
 let medicinesApiError = null;
 let isBatchesLoading = false;
 let batchesApiError = null;
 let isReportsLoading = false;
 let reportsApiError = null;
+let isSalesLoading = false;
+let salesApiError = null;
+
+async function fetchLiveSales() {
+  isSalesLoading = true;
+  salesApiError = null;
+  renderSalesHistoryTable();
+
+  try {
+    const res = await fetch('/api/sales');
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: Failed to reach Sales API`);
+    }
+    const json = await res.json();
+    liveSales = json.data || [];
+    isSalesLoading = false;
+    renderSalesHistoryTable();
+    renderRecentSales();
+  } catch (err) {
+    console.error('Phase 4C Sales API Error:', err);
+    isSalesLoading = false;
+    salesApiError = err.message || 'Network / Database Error';
+    liveSales = [];
+    renderSalesHistoryTable();
+    renderRecentSales();
+  }
+}
+
+async function fetchLivePatients() {
+  try {
+    const res = await fetch('/api/sales/patients');
+    if (res.ok) {
+      const json = await res.json();
+      livePatients = json.data || [];
+      populatePatientDropdownOptions();
+    }
+  } catch (err) {
+    console.warn('Could not fetch patients from API:', err.message);
+  }
+}
 
 async function fetchLiveReports() {
   isReportsLoading = true;
@@ -522,17 +565,36 @@ function populateBatchDropdownOptions() {
   if (!batchSelect) return;
 
   const activeBatches = liveBatches.length > 0 ? liveBatches : MockDB.batches;
+  const currentVal = batchSelect.value;
+
   batchSelect.innerHTML = `<option value="">-- Choose Medicine Batch --</option>` +
     activeBatches.map(b => {
       const medName = b.medicineName || (MockDB.medicines.find(m => m.id === b.medicineId)?.name) || 'Unknown';
       const days = b.daysToExpiry !== undefined ? b.daysToExpiry : getDaysUntil(b.expiryDate);
       const isExpired = days < 0;
-      const stock = b.stock !== undefined ? b.stock : b.quantity;
+      const stock = b.stock !== undefined ? parseInt(b.stock, 10) : parseInt(b.quantity, 10);
       const price = parseFloat(b.sellingPrice || b.unitPrice || 0);
-      return `<option value="${b.id}" ${isExpired || stock === 0 ? 'disabled' : ''}>
-        ${medName} | Batch: ${b.batchNumber} | Stock: ${stock} | ₹${price.toFixed(2)} ${isExpired ? '(EXPIRED)' : ''}
+
+      return `<option value="${b.id}" data-price="${price}" data-stock="${stock}" data-med="${medName}" data-batch="${b.batchNumber}" ${isExpired || stock === 0 ? 'disabled' : ''}>
+        ${medName} | Batch: ${b.batchNumber} | Stock: ${stock} units | ₹${price.toFixed(2)} ${isExpired ? '(EXPIRED)' : stock === 0 ? '(OUT OF STOCK)' : ''}
       </option>`;
     }).join("");
+
+  if (currentVal) batchSelect.value = currentVal;
+  updateSaleModalCalculations();
+}
+
+function populatePatientDropdownOptions() {
+  const patientSelect = document.getElementById("sale-patient-select");
+  if (!patientSelect) return;
+
+  const currentVal = patientSelect.value;
+  const patients = livePatients.length > 0 ? livePatients : MockDB.patients;
+
+  patientSelect.innerHTML = `<option value="">Walk-in Customer (Over-The-Counter)</option>` +
+    patients.map(p => `<option value="${p.id}">${p.name} ${p.phone ? `(${p.phone})` : ''}</option>`).join("");
+
+  if (currentVal) patientSelect.value = currentVal;
 }
 
 
@@ -956,7 +1018,7 @@ function renderPrescriptionsView() {
   }).join("");
 }
 
-// Sales History Table with Search
+// Sales History Table with Search (Connected to live MySQL /api/sales)
 function renderSalesHistoryTable() {
   const tbody = document.getElementById("sales-table-tbody");
   if (!tbody) return;
@@ -965,50 +1027,89 @@ function renderSalesHistoryTable() {
   const countDisplay = document.getElementById("sales-count-display");
   const query = searchInput ? searchInput.value.toLowerCase().trim() : "";
 
-  let filtered = MockDB.sales.filter(s => {
-    const patient = MockDB.patients.find(p => p.id === s.patientId);
-    const patientName = patient ? patient.name.toLowerCase() : "walk-in";
-    const inv = s.invoiceNumber.toLowerCase();
-    const pay = s.paymentMethod.toLowerCase();
-
-    return query === "" || 
-      inv.includes(query) || 
-      patientName.includes(query) || 
-      pay.includes(query);
-  });
-
-  if (countDisplay) {
-    countDisplay.textContent = `Showing ${filtered.length} of ${MockDB.sales.length} sales`;
-  }
-
-  if (filtered.length === 0) {
+  // State 1: Loading from MySQL
+  if (isSalesLoading) {
+    if (countDisplay) countDisplay.textContent = "Connecting to MySQL...";
     tbody.innerHTML = `
       <tr>
         <td colspan="8" class="empty-table-state">
-          <svg viewBox="0 0 24 24" fill="none"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle></svg>
-          <div class="empty-table-title">No sales records found</div>
-          <div class="empty-table-sub">Try searching with a different invoice number or patient name.</div>
+          <div class="pulse-dot" style="margin:0 auto 12px; width:16px; height:16px;"></div>
+          <div class="empty-table-title">Loading Sales Transactions...</div>
+          <div class="empty-table-sub">Querying sales ledger and audit items from MySQL <code>pharmacy_db</code></div>
         </td>
       </tr>
     `;
     return;
   }
 
-  tbody.innerHTML = filtered.map(s => {
-    const patient = MockDB.patients.find(p => p.id === s.patientId);
-    const doctor = MockDB.doctors.find(d => d.id === s.doctorId);
-    const itemsSummary = s.items.map(i => `${i.medicineName} (${i.qty})`).join(", ");
+  // State 2: Error (Never display fake data when API fails)
+  if (salesApiError) {
+    if (countDisplay) countDisplay.textContent = "Database Error";
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="8" class="empty-table-state">
+          <svg viewBox="0 0 24 24" fill="none" style="stroke:var(--danger);"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+          <div class="empty-table-title" style="color:var(--danger);">Failed to Retrieve Sales History</div>
+          <div class="empty-table-sub">${salesApiError}</div>
+          <button class="btn btn-primary btn-sm" onclick="fetchLiveSales()" style="margin-top:14px;">
+            🔄 Retry Database Query
+          </button>
+        </td>
+      </tr>
+    `;
+    return;
+  }
 
+  const salesData = liveSales;
+
+  let filtered = salesData.filter(s => {
+    const patientName = (s.patientName || "walk-in").toLowerCase();
+    const inv = (s.invoiceNumber || "").toLowerCase();
+    const phone = (s.patientPhone || "").toLowerCase();
+    const date = (s.date || "").toLowerCase();
+
+    return query === "" || 
+      inv.includes(query) || 
+      patientName.includes(query) || 
+      phone.includes(query) ||
+      date.includes(query);
+  });
+
+  if (countDisplay) {
+    countDisplay.textContent = `Showing ${filtered.length} of ${salesData.length} sales from MySQL`;
+  }
+
+  // State 3: Empty State
+  if (filtered.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="8" class="empty-table-state">
+          <svg viewBox="0 0 24 24" fill="none"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle></svg>
+          <div class="empty-table-title">${query ? 'No matching sales records' : 'No Sales Recorded in Database'}</div>
+          <div class="empty-table-sub">${query ? 'Try a different invoice number or patient name.' : 'Click "+ New Sale Transaction" to record your first live transaction.'}</div>
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  // State 4: Render Live MySQL Sales
+  tbody.innerHTML = filtered.map(s => {
     return `
       <tr>
         <td><span class="font-mono font-bold">${s.invoiceNumber}</span></td>
-        <td>${s.date}</td>
-        <td>${patient ? patient.name : 'Walk-in Cash Customer'}</td>
-        <td>${doctor ? doctor.name : 'OTC Self-Medication'}</td>
-        <td style="max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${itemsSummary}">${itemsSummary}</td>
-        <td><span class="badge-status badge-info">${s.paymentMethod}</span></td>
-        <td><strong>₹${s.totalAmount.toFixed(2)}</strong></td>
-        <td><button class="btn btn-outline btn-sm" onclick="showInvoiceDetails(${s.id})">Print Receipt</button></td>
+        <td><strong>${s.date}</strong></td>
+        <td>
+          <div style="display:flex; flex-direction:column;">
+            <strong>${s.patientName}</strong>
+            ${s.patientPhone ? `<span style="font-size:0.75rem; color:var(--text-muted);">${s.patientPhone}</span>` : ''}
+          </div>
+        </td>
+        <td><span style="color:var(--text-muted); font-size:0.83rem;">Dispensary POS</span></td>
+        <td><span class="badge-status badge-info">${s.itemCount} item(s) (${s.totalUnits} units)</span></td>
+        <td><span class="badge-status badge-in-stock">Billed</span></td>
+        <td><strong style="color:var(--primary);">₹${parseFloat(s.totalAmount).toFixed(2)}</strong></td>
+        <td><button class="btn btn-outline btn-sm" onclick="showInvoiceDetails(${s.id})">View Invoice</button></td>
       </tr>
     `;
   }).join("");
@@ -1270,61 +1371,56 @@ function closeModal(modalId) {
 }
 
 function populateDropdownOptions() {
-  // Populate category dropdowns (uses live MySQL categories if loaded, else fallback)
   populateCategoryDropdowns();
-
-  // Batch dropdown in Record Sale
-  const batchSelect = document.getElementById("sale-batch-select");
-  if (batchSelect) {
-    batchSelect.innerHTML = `<option value="">-- Choose Medicine Batch --</option>` +
-      MockDB.batches.map(b => {
-        const med = MockDB.medicines.find(m => m.id === b.medicineId);
-        const status = getBatchStatus(b);
-        const isExpired = status.type === "expired";
-        return `<option value="${b.id}" ${isExpired || b.stock === 0 ? 'disabled' : ''}>
-          ${med ? med.name : 'Unknown'} | Batch: ${b.batchNumber} | Stock: ${b.stock} | ₹${b.sellingPrice.toFixed(2)} ${isExpired ? '(EXPIRED)' : ''}
-        </option>`;
-      }).join("");
-  }
-
-  // Patient dropdown in Record Sale
-  const patientSelect = document.getElementById("sale-patient-select");
-  if (patientSelect) {
-    patientSelect.innerHTML = `<option value="0">Walk-in Customer (Over-The-Counter)</option>` +
-      MockDB.patients.map(p => `<option value="${p.id}">${p.name} (${p.phone})</option>`).join("");
-  }
+  populateBatchDropdownOptions();
+  populatePatientDropdownOptions();
 }
 
-// Dynamic Bill Calculator in POS Modal
+// Dynamic Bill Calculator in POS Modal (Derived from MySQL live batches)
 function updateSaleModalCalculations() {
-  const batchId = parseInt(document.getElementById("sale-batch-select").value);
-  const qty = parseInt(document.getElementById("sale-quantity-input").value) || 0;
-  const batch = MockDB.batches.find(b => b.id === batchId);
-
+  const batchSelect = document.getElementById("sale-batch-select");
+  const qtyInput = document.getElementById("sale-quantity-input");
   const priceEl = document.getElementById("sale-unit-price-display");
   const subtotalEl = document.getElementById("sale-subtotal-display");
   const stockAlertEl = document.getElementById("sale-stock-warning");
 
+  if (!batchSelect || !qtyInput) return;
+
+  const batchId = parseInt(batchSelect.value, 10);
+  const qty = parseInt(qtyInput.value, 10) || 0;
+
+  const liveBatch = liveBatches.find(b => b.id === batchId);
+  const mockBatch = MockDB.batches.find(b => b.id === batchId);
+  const batch = liveBatch || mockBatch;
+
   if (!batch) {
-    priceEl.textContent = "₹0.00";
-    subtotalEl.textContent = "₹0.00";
-    stockAlertEl.textContent = "";
+    if (priceEl) priceEl.textContent = "₹0.00";
+    if (subtotalEl) subtotalEl.textContent = "₹0.00";
+    if (stockAlertEl) stockAlertEl.textContent = "";
     return;
   }
 
-  priceEl.textContent = `₹${batch.sellingPrice.toFixed(2)}`;
-  const total = batch.sellingPrice * qty;
-  subtotalEl.textContent = `₹${total.toFixed(2)}`;
+  const unitPrice = parseFloat(batch.unitPrice || batch.sellingPrice || 0);
+  const availableStock = batch.stock !== undefined ? parseInt(batch.stock, 10) : parseInt(batch.quantity, 10);
 
-  if (qty > batch.stock) {
-    stockAlertEl.textContent = `⚠️ Error: Requested quantity (${qty}) exceeds available stock (${batch.stock})!`;
-    stockAlertEl.style.color = "var(--danger)";
-  } else if (qty <= 0) {
-    stockAlertEl.textContent = `⚠️ Quantity must be at least 1 unit.`;
-    stockAlertEl.style.color = "var(--danger)";
-  } else {
-    stockAlertEl.textContent = `✓ Stock available: ${batch.stock} units in batch`;
-    stockAlertEl.style.color = "var(--success)";
+  if (priceEl) priceEl.textContent = `₹${unitPrice.toFixed(2)}`;
+  const total = Math.max(0, qty * unitPrice);
+  if (subtotalEl) subtotalEl.textContent = `₹${total.toFixed(2)}`;
+
+  if (stockAlertEl) {
+    if (qty > availableStock) {
+      stockAlertEl.textContent = `⚠️ Error: Requested quantity (${qty}) exceeds available stock (${availableStock} units)!`;
+      stockAlertEl.style.color = "var(--danger)";
+    } else if (qty <= 0) {
+      stockAlertEl.textContent = `⚠️ Quantity must be at least 1 unit.`;
+      stockAlertEl.style.color = "var(--danger)";
+    } else if (availableStock <= 15) {
+      stockAlertEl.textContent = `⚡ Low Stock: Only ${availableStock} units available in this batch.`;
+      stockAlertEl.style.color = "var(--warning)";
+    } else {
+      stockAlertEl.textContent = `✓ Stock available: ${availableStock} units ready for dispensing.`;
+      stockAlertEl.style.color = "var(--success)";
+    }
   }
 }
 
@@ -1882,68 +1978,95 @@ function quickRestockBatch(batchId) {
   showToast(`Restocked +${restockQty} units for Batch ${batch.batchNumber}. Total stock: ${batch.stock}.`, "success");
 }
 
-// Action: Record Sale Transaction (POS)
-function executeSaleTransaction() {
-  const batchId = parseInt(document.getElementById("sale-batch-select").value);
-  const qty = parseInt(document.getElementById("sale-quantity-input").value);
-  const patientId = parseInt(document.getElementById("sale-patient-select").value) || null;
-  const paymentMethod = document.getElementById("sale-payment-method").value;
+// Action: Record Sale Transaction (POS) - Connected to MySQL POST /api/sales
+async function executeSaleTransaction() {
+  const form = document.getElementById("form-record-sale");
+  const submitBtn = form ? form.querySelector('button[type="submit"]') : null;
+  const originalBtnText = submitBtn ? submitBtn.innerHTML : "Confirm & Print Bill";
+
+  const batchId = parseInt(document.getElementById("sale-batch-select").value, 10);
+  const qty = parseInt(document.getElementById("sale-quantity-input").value, 10);
+  const patientIdVal = document.getElementById("sale-patient-select").value;
+  const patientId = patientIdVal ? parseInt(patientIdVal, 10) : null;
 
   document.querySelectorAll("#modal-record-sale .field-error").forEach(el => el.classList.remove("active"));
 
-  if (!batchId) {
+  let isValid = true;
+  if (isNaN(batchId) || batchId <= 0) {
     document.getElementById("err-sale-batch").classList.add("active");
-    return;
+    isValid = false;
   }
 
   if (isNaN(qty) || qty <= 0) {
     document.getElementById("err-sale-qty").classList.add("active");
+    isValid = false;
+  }
+
+  if (!isValid) {
+    showToast("Please correct the validation errors in the sales form.", "error");
     return;
   }
 
-  const batch = MockDB.batches.find(b => b.id === batchId);
-  if (!batch) {
-    showToast("Selected batch was not found.", "error");
-    return;
+  // Pre-validate stock with live batches if present
+  const liveBatch = liveBatches.find(b => b.id === batchId);
+  if (liveBatch) {
+    const available = parseInt(liveBatch.stock, 10);
+    if (qty > available) {
+      showToast(`Transaction Blocked: Requested ${qty} units, but only ${available} units are available!`, "error");
+      return;
+    }
+    if (liveBatch.daysToExpiry !== undefined && liveBatch.daysToExpiry < 0) {
+      showToast("Clinical Safety Block: This batch is EXPIRED and cannot be dispensed!", "error");
+      return;
+    }
   }
 
-  // Prevent overselling
-  if (qty > batch.stock) {
-    showToast(`Transaction Blocked: Requested ${qty} units, but only ${batch.stock} are available!`, "error");
-    return;
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = `
+      <span class="pulse-dot" style="width:10px; height:10px; margin-right:6px; display:inline-block;"></span>
+      Processing Sale in MySQL...
+    `;
   }
 
-  // Prevent selling expired medicine
-  if (getDaysUntil(batch.expiryDate) < 0) {
-    showToast("Clinical Safety Warning: This batch is EXPIRED and cannot be dispensed!", "error");
-    return;
+  try {
+    const response = await fetch("/api/sales", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        patientId: patientId,
+        items: [{ batchId: batchId, quantity: qty }]
+      })
+    });
+
+    const result = await response.json();
+    if (!response.ok || !result.success) {
+      throw new Error(result.error || `HTTP ${response.status}: Sale transaction failed`);
+    }
+
+    closeModal("modal-record-sale");
+    form.reset();
+    showToast(`Bill ${result.data.invoiceNumber} recorded! Total: ₹${parseFloat(result.data.totalAmount).toFixed(2)}.`, "success");
+
+    // Refresh live sales, batches, medicines and reports
+    await fetchLiveSales();
+    await fetchLiveBatches();
+    await fetchLiveMedicines();
+    await fetchLiveReports();
+    refreshAllViews();
+
+    // Show full invoice receipt from MySQL
+    showInvoiceDetails(result.data.saleId);
+
+  } catch (err) {
+    console.error("Sale transaction error:", err);
+    showToast(err.message || "Failed to process sale in MySQL.", "error");
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = originalBtnText;
+    }
   }
-
-  // Deduct inventory stock
-  batch.stock -= qty;
-
-  const med = MockDB.medicines.find(m => m.id === batch.medicineId);
-  const subtotal = batch.sellingPrice * qty;
-  const invoiceNum = `INV-2026-${1050 + MockDB.sales.length}`;
-
-  MockDB.sales.push({
-    id: 600 + MockDB.sales.length + 1,
-    invoiceNumber: invoiceNum,
-    date: "2026-10-21 13:58",
-    patientId: patientId,
-    doctorId: null,
-    prescriptionId: null,
-    paymentMethod,
-    totalAmount: subtotal,
-    items: [
-      { batchId: batch.id, medicineName: med ? med.name : 'Medicine', qty, unitPrice: batch.sellingPrice, subtotal }
-    ]
-  });
-
-  closeModal("modal-record-sale");
-  document.getElementById("form-record-sale").reset();
-  refreshAllViews();
-  showToast(`Bill ${invoiceNum} generated! Deducted ${qty} units from Batch ${batch.batchNumber}.`, "success");
 }
 
 // Action: Dispense Doctor Prescription
@@ -1976,25 +2099,83 @@ function switchView(viewName, filterMedicineId = null) {
   }
 }
 
-// Receipt Alert Pop-up
-function showInvoiceDetails(saleId) {
-  const sale = MockDB.sales.find(s => s.id === saleId);
-  if (!sale) return;
-  alert(
-    `========================================\n` +
-    `  PHARMACARE CLINICAL SALES RECEIPT     \n` +
-    `========================================\n` +
-    `Invoice: ${sale.invoiceNumber}\n` +
-    `Date:    ${sale.date}\n` +
-    `Payment: ${sale.paymentMethod}\n` +
-    `----------------------------------------\n` +
-    `Items Dispensed:\n` +
-    sale.items.map(i => `  • ${i.medicineName} x ${i.qty} = ₹${i.subtotal.toFixed(2)}`).join("\n") + "\n" +
-    `----------------------------------------\n` +
-    `TOTAL AMOUNT: ₹${sale.totalAmount.toFixed(2)}\n` +
-    `========================================\n` +
-    `Thank you for choosing PharmaCare Rx!`
-  );
+// Full Invoice Receipt Modal (Connected to live MySQL GET /api/sales/:id)
+async function showInvoiceDetails(saleId) {
+  try {
+    const res = await fetch(`/api/sales/${saleId}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to fetch sale details`);
+    const json = await res.json();
+    if (!json.success || !json.data) throw new Error(json.error || "Sale not found");
+
+    const sale = json.data;
+    const modalBody = document.getElementById("invoice-modal-body");
+    if (!modalBody) return;
+
+    modalBody.innerHTML = `
+      <div style="background:#ffffff; border:1px solid var(--border); border-radius:var(--radius-md); padding:20px; font-family:var(--font-sans);">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2px solid var(--border); padding-bottom:14px; margin-bottom:14px;">
+          <div>
+            <div style="font-size:1.15rem; font-weight:800; color:var(--primary); letter-spacing:-0.02em;">PHARMACARE DISPENSARY</div>
+            <div style="font-size:0.75rem; color:var(--text-muted);">Clinical Pharmacy & Prescription Registry</div>
+            <div style="font-size:0.75rem; color:var(--text-muted);">Tax / Reg #PH-2024-91 | MySQL Audit Verified</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-family:var(--font-mono); font-size:1rem; font-weight:800; color:var(--text);">${sale.invoiceNumber}</div>
+            <div style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">Date: <strong>${sale.date}</strong></div>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:16px; background:#f8fafc; padding:10px 14px; border-radius:var(--radius-sm); font-size:0.82rem;">
+          <div>
+            <span style="color:var(--text-muted);">Customer / Patient:</span><br>
+            <strong>${sale.patientName || 'Walk-in Customer'}</strong>
+            ${sale.patientPhone ? `<br><span style="color:var(--text-muted); font-size:0.75rem;">Phone: ${sale.patientPhone}</span>` : ''}
+          </div>
+          <div>
+            <span style="color:var(--text-muted);">Transaction Status:</span><br>
+            <span class="badge-status badge-in-stock">✓ Settled & Stock Deducted</span>
+          </div>
+        </div>
+
+        <table style="width:100%; border-collapse:collapse; font-size:0.83rem; margin-bottom:16px;">
+          <thead>
+            <tr style="border-bottom:1.5px solid var(--border); text-align:left; color:var(--text-muted); font-size:0.75rem; text-transform:uppercase;">
+              <th style="padding:6px 4px;">Medication</th>
+              <th style="padding:6px 4px;">Batch #</th>
+              <th style="padding:6px 4px; text-align:center;">Qty</th>
+              <th style="padding:6px 4px; text-align:right;">Price</th>
+              <th style="padding:6px 4px; text-align:right;">Subtotal</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${sale.items.map(item => `
+              <tr style="border-bottom:1px solid #f1f5f9;">
+                <td style="padding:8px 4px;"><strong>${item.medicineName}</strong></td>
+                <td style="padding:8px 4px;"><span class="font-mono" style="font-size:0.78rem;">${item.batchNumber}</span></td>
+                <td style="padding:8px 4px; text-align:center;">${item.quantity}</td>
+                <td style="padding:8px 4px; text-align:right;">₹${parseFloat(item.unitPrice).toFixed(2)}</td>
+                <td style="padding:8px 4px; text-align:right; font-weight:600;">₹${parseFloat(item.subtotal).toFixed(2)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+
+        <div style="border-top:2px solid var(--border); padding-top:12px; display:flex; justify-content:space-between; align-items:center;">
+          <div style="font-size:0.75rem; color:var(--text-muted);">
+            Items: <strong>${sale.itemsCount}</strong> | Stock Triggers Enforced
+          </div>
+          <div style="font-size:1.2rem; font-weight:800; color:var(--primary);">
+            Total: ₹${parseFloat(sale.totalAmount).toFixed(2)}
+          </div>
+        </div>
+      </div>
+    `;
+
+    openModal("modal-view-invoice");
+  } catch (err) {
+    console.error("Error fetching invoice:", err);
+    showToast(err.message || "Failed to load receipt details.", "error");
+  }
 }
 
 // =====================================================================
