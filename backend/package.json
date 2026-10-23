@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node server.js",
     "test-db": "node test_db_connection.js",
-    "test:db": "node test_db_connection.js"
+    "test:db": "node test_db_connection.js",
+    "test:api": "node test_medicine_api.js",
+    "test": "node test_medicine_api.js"
   },
   "dependencies": {
     "cors": "^2.8.6",

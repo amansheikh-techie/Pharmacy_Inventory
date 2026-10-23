@@ -384,7 +384,7 @@
               <h2>Batch-Level Traceability & Inventory</h2>
               <p>Track unique batch numbers, expiry dates, purchase costs, and stock levels</p>
             </div>
-            <button class="btn btn-primary" onclick="openModal('modal-add-medicine')">
+            <button class="btn btn-primary" onclick="openAddBatchModal()">
               + Add Medicine Batch
             </button>
           </div>
@@ -995,6 +995,56 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-outline btn-modal-cancel">Cancel</button>
           <button type="submit" class="btn btn-primary">Save Batch Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       MODAL 6: ADD BATCH TO MEDICINE (Phase 3D)
+       ===================================================================== -->
+  <div class="modal-overlay" id="modal-add-batch">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>
+          <svg style="width:20px; height:20px; stroke:var(--primary); fill:none; stroke-width:2;" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+          Register New Medicine Batch
+        </h3>
+        <button class="modal-close-btn">&times;</button>
+      </div>
+      <form id="form-add-batch" novalidate>
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-group col-span-2">
+              <label for="add-batch-medicine-select">Medicine Formulation *</label>
+              <select id="add-batch-medicine-select" required></select>
+              <div class="field-error" id="err-add-batch-med">Please select a registered medicine formulation.</div>
+            </div>
+            <div class="form-group">
+              <label for="add-batch-number">Batch Number *</label>
+              <input type="text" id="add-batch-number" placeholder="e.g. BATCH-PCM-2027A" required>
+              <div class="field-error" id="err-add-batch-number">Batch number is required.</div>
+            </div>
+            <div class="form-group">
+              <label for="add-batch-expiry">Expiry Date *</label>
+              <input type="date" id="add-batch-expiry" required>
+              <div class="field-error" id="err-add-batch-expiry">Valid expiry date is required.</div>
+            </div>
+            <div class="form-group">
+              <label for="add-batch-price">Unit Selling Price (₹) *</label>
+              <input type="number" step="0.01" min="0.01" id="add-batch-price" placeholder="5.00" value="5.00" required>
+              <div class="field-error" id="err-add-batch-price">Unit price must be greater than 0.</div>
+            </div>
+            <div class="form-group">
+              <label for="add-batch-stock">Stock Units *</label>
+              <input type="number" min="0" id="add-batch-stock" placeholder="100" value="100" required>
+              <div class="field-error" id="err-add-batch-stock">Stock units cannot be negative.</div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline btn-modal-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-save-new-batch">Save Batch to MySQL</button>
         </div>
       </form>
     </div>

@@ -164,7 +164,9 @@ document.addEventListener("DOMContentLoaded", () => {
   initSearchAndFilters();
   initModalsAndForms();
   refreshAllViews();
+  fetchLiveCategories(); // Phase 3D: Fetch real categories from MySQL
   fetchLiveMedicines(); // Phase 3C: Fetch real medicines from MySQL
+  fetchLiveBatches(); // Phase 3D: Fetch real inventory batches from MySQL
 });
 
 // Sidebar Navigation
@@ -186,9 +188,11 @@ function initNavigation() {
       const activeSec = document.getElementById(`view-${targetView}`);
       if (activeSec) activeSec.classList.add("active");
 
-      // Phase 3C: When navigating to medicines tab, fetch latest records from MySQL
+      // Phase 3C & 3D: Refresh live records when navigating tabs
       if (targetView === "medicines") {
         fetchLiveMedicines();
+      } else if (targetView === "batches") {
+        fetchLiveBatches();
       }
     });
   });
@@ -304,13 +308,22 @@ function refreshAllViews() {
   populateDropdownOptions();
 }
 
-// Dashboard Statistics (Recalculates from active MockDB state)
+// Dashboard Statistics (Recalculates from active MockDB state and live MySQL)
 function renderDashboardStats() {
-  const totalMeds = MockDB.medicines.length;
-  const totalStock = MockDB.batches.reduce((sum, b) => sum + b.stock, 0);
+  const totalMeds = liveMedicines.length > 0 ? liveMedicines.length : MockDB.medicines.length;
+  const activeBatches = liveBatches.length > 0 ? liveBatches : MockDB.batches;
   
-  const lowStockBatches = MockDB.batches.filter(b => b.stock <= b.reorderLevel && getDaysUntil(b.expiryDate) >= 0);
-  const expiringBatches = MockDB.batches.filter(b => getDaysUntil(b.expiryDate) <= 30);
+  const totalStock = activeBatches.reduce((sum, b) => sum + (parseInt(b.stock, 10) || 0), 0);
+  const lowStockBatches = activeBatches.filter(b => {
+    const stock = parseInt(b.stock, 10) || 0;
+    const reorder = parseInt(b.reorderLevel, 10) || 30;
+    const days = b.daysToExpiry !== undefined ? b.daysToExpiry : getDaysUntil(b.expiryDate);
+    return stock <= reorder && days >= 0;
+  });
+  const expiringBatches = activeBatches.filter(b => {
+    const days = b.daysToExpiry !== undefined ? b.daysToExpiry : getDaysUntil(b.expiryDate);
+    return days <= 30;
+  });
 
   const elMeds = document.getElementById("stat-total-medicines");
   const elStock = document.getElementById("stat-total-stock");
@@ -435,11 +448,102 @@ function renderMedicinesTable() {
   if (!tbody) return;
 
 // =====================================================================
-// Phase 3C: Live MySQL Medicines State & Fetcher
+// Phase 3C & 3D: Live MySQL Medicines & Categories State & Fetchers
 // =====================================================================
 let liveMedicines = [];
+let liveCategories = [];
+let liveBatches = [];
 let isMedicinesLoading = false;
 let medicinesApiError = null;
+let isBatchesLoading = false;
+let batchesApiError = null;
+
+async function fetchLiveBatches() {
+  isBatchesLoading = true;
+  batchesApiError = null;
+  renderBatchesTable();
+
+  try {
+    const res = await fetch('/api/batches');
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: Failed to reach API`);
+    }
+    const json = await res.json();
+    liveBatches = json.data || [];
+    isBatchesLoading = false;
+    renderBatchesTable();
+    populateBatchDropdownOptions();
+    renderDashboardStats();
+  } catch (err) {
+    console.error('Phase 3D Batches API Error:', err);
+    isBatchesLoading = false;
+    batchesApiError = err.message || 'Network / Database Error';
+    renderBatchesTable();
+  }
+}
+
+function populateBatchDropdownOptions() {
+  const batchSelect = document.getElementById("sale-batch-select");
+  if (!batchSelect) return;
+
+  const activeBatches = liveBatches.length > 0 ? liveBatches : MockDB.batches;
+  batchSelect.innerHTML = `<option value="">-- Choose Medicine Batch --</option>` +
+    activeBatches.map(b => {
+      const medName = b.medicineName || (MockDB.medicines.find(m => m.id === b.medicineId)?.name) || 'Unknown';
+      const days = b.daysToExpiry !== undefined ? b.daysToExpiry : getDaysUntil(b.expiryDate);
+      const isExpired = days < 0;
+      const stock = b.stock !== undefined ? b.stock : b.quantity;
+      const price = parseFloat(b.sellingPrice || b.unitPrice || 0);
+      return `<option value="${b.id}" ${isExpired || stock === 0 ? 'disabled' : ''}>
+        ${medName} | Batch: ${b.batchNumber} | Stock: ${stock} | ₹${price.toFixed(2)} ${isExpired ? '(EXPIRED)' : ''}
+      </option>`;
+    }).join("");
+}
+
+
+async function fetchLiveCategories() {
+  try {
+    const res = await fetch('/api/medicines/categories');
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+        liveCategories = json.data;
+        populateCategoryDropdowns();
+      }
+    }
+  } catch (err) {
+    console.warn('Could not fetch categories from MySQL API:', err.message);
+  }
+}
+
+function populateCategoryDropdowns() {
+  const cats = (liveCategories.length > 0) ? liveCategories : MockDB.categories;
+
+  // 1. Add Medicine Modal Category Select
+  const newCatSelect = document.getElementById("new-med-category");
+  if (newCatSelect) {
+    const currentVal = newCatSelect.value;
+    newCatSelect.innerHTML = cats.map(c => `<option value="${c.id}">${c.name}</option>`).join("");
+    if (currentVal) newCatSelect.value = currentVal;
+  }
+
+  // 2. Edit Medicine Modal Category Select
+  const editCatSelect = document.getElementById("edit-med-category");
+  if (editCatSelect) {
+    const currentVal = editCatSelect.value;
+    editCatSelect.innerHTML = cats.map(c => `<option value="${c.id}">${c.name}</option>`).join("");
+    if (currentVal) editCatSelect.value = currentVal;
+  }
+
+  // 3. Medicine Filter Dropdown in Medicines View
+  const catFilter = document.getElementById("medicine-category-filter");
+  if (catFilter) {
+    const currentVal = catFilter.value;
+    catFilter.innerHTML = `<option value="">All Categories</option>` +
+      cats.map(c => `<option value="${c.id}">${c.name}</option>`).join("");
+    if (currentVal) catFilter.value = currentVal;
+  }
+}
 
 async function fetchLiveMedicines() {
   isMedicinesLoading = true;
@@ -455,7 +559,8 @@ async function fetchLiveMedicines() {
     liveMedicines = json.data || [];
     isMedicinesLoading = false;
     renderMedicinesTable();
-    populateLiveCategoryFilter();
+    populateCategoryDropdowns();
+    renderDashboardStats();
   } catch (err) {
     console.error('Phase 3C API Error:', err);
     isMedicinesLoading = false;
@@ -465,21 +570,7 @@ async function fetchLiveMedicines() {
 }
 
 function populateLiveCategoryFilter() {
-  const catFilter = document.getElementById("medicine-category-filter");
-  if (!catFilter || liveMedicines.length === 0) return;
-
-  // Extract unique categories from live medicines
-  const categoriesMap = new Map();
-  liveMedicines.forEach(m => {
-    if (m.categoryId && m.categoryName) {
-      categoriesMap.set(m.categoryId, m.categoryName);
-    }
-  });
-
-  const currentVal = catFilter.value;
-  catFilter.innerHTML = `<option value="">All Categories</option>` +
-    Array.from(categoriesMap.entries()).map(([id, name]) => `<option value="${id}">${name}</option>`).join("");
-  catFilter.value = currentVal;
+  populateCategoryDropdowns();
 }
 
 // Medicines Master Table with Live MySQL Integration (Phase 3C)
@@ -584,6 +675,9 @@ function renderMedicinesTable() {
             <button class="btn btn-outline btn-sm" onclick="openViewMedicineModal(${med.id})" title="View Details">
               View
             </button>
+            <button class="btn btn-outline btn-sm" onclick="openEditMedicineModal(${med.id})" title="Edit Medicine Formulation">
+              Edit
+            </button>
             <button class="btn btn-primary btn-sm" onclick="switchView('batches')" title="View Batches">
               Batches
             </button>
@@ -594,42 +688,78 @@ function renderMedicinesTable() {
   }).join("");
 }
 
-// Inventory & Batches Table with Search & Status Filter
+// Inventory & Batches Table with Live MySQL Integration (Phase 3D)
 function renderBatchesTable(filterMedicineId = null) {
   const tbody = document.getElementById("batches-table-tbody");
   if (!tbody) return;
 
+  const countDisplay = document.getElementById("batch-count-display");
+
+  // State 1: Loading from MySQL API
+  if (isBatchesLoading) {
+    if (countDisplay) countDisplay.textContent = "Connecting to MySQL...";
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="9" class="empty-table-state">
+          <div class="pulse-dot" style="margin:0 auto 12px; width:16px; height:16px;"></div>
+          <div class="empty-table-title">Querying MySQL Database...</div>
+          <div class="empty-table-sub">Fetching real inventory batches from <code>pharmacy_db.medicinebatch</code></div>
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  // State 2: Error when API fails
+  if (batchesApiError) {
+    if (countDisplay) countDisplay.textContent = "Connection Error";
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="9" class="empty-table-state">
+          <svg viewBox="0 0 24 24" fill="none" style="stroke:var(--danger);"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+          <div class="empty-table-title" style="color:var(--danger);">Unable to Load Batches from API</div>
+          <div class="empty-table-sub">The database or backend API is unreachable (${batchesApiError}).</div>
+          <button class="btn btn-primary btn-sm" onclick="fetchLiveBatches()" style="margin-top:14px;">
+            🔄 Retry Connection
+          </button>
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
   const searchInput = document.getElementById("batch-search-input");
   const statusFilter = document.getElementById("batch-status-filter");
-  const countDisplay = document.getElementById("batch-count-display");
 
   const query = searchInput ? searchInput.value.toLowerCase().trim() : "";
   const selectedStatus = statusFilter ? statusFilter.value : "";
 
-  let batches = MockDB.batches;
+  let batches = liveBatches.length > 0 ? liveBatches : MockDB.batches;
   if (filterMedicineId) {
     batches = batches.filter(b => b.medicineId === filterMedicineId);
   }
 
   let filtered = batches.filter(b => {
-    const med = MockDB.medicines.find(m => m.id === b.medicineId);
-    const medName = med ? med.name.toLowerCase() : "";
-    const matchesSearch = query === "" || 
-      b.batchNumber.toLowerCase().includes(query) || 
-      medName.includes(query);
+    const medName = (b.medicineName || (MockDB.medicines.find(m => m.id === b.medicineId)?.name) || "").toLowerCase();
+    const batchNum = (b.batchNumber || "").toLowerCase();
+    const matchesSearch = query === "" || batchNum.includes(query) || medName.includes(query);
 
-    const status = getBatchStatus(b);
+    const days = b.daysToExpiry !== undefined ? b.daysToExpiry : getDaysUntil(b.expiryDate);
+    const stock = parseInt(b.stock !== undefined ? b.stock : b.quantity, 10) || 0;
+    const reorder = parseInt(b.reorderLevel, 10) || 30;
+
     let matchesStatus = true;
-    if (selectedStatus === "in-stock") matchesStatus = status.type === "in-stock";
-    else if (selectedStatus === "low-stock") matchesStatus = b.stock <= b.reorderLevel;
-    else if (selectedStatus === "warning") matchesStatus = status.type === "warning";
-    else if (selectedStatus === "expired") matchesStatus = status.type === "expired";
+    if (selectedStatus === "in-stock") matchesStatus = days > 30 && stock > reorder;
+    else if (selectedStatus === "low-stock") matchesStatus = stock <= reorder && days >= 0;
+    else if (selectedStatus === "warning") matchesStatus = days >= 0 && days <= 30;
+    else if (selectedStatus === "expired") matchesStatus = days < 0;
 
     return matchesSearch && matchesStatus;
   });
 
   if (countDisplay) {
-    countDisplay.textContent = `Showing ${filtered.length} of ${MockDB.batches.length} batches`;
+    const totalCount = liveBatches.length > 0 ? liveBatches.length : MockDB.batches.length;
+    countDisplay.textContent = `Showing ${filtered.length} of ${totalCount} live batches from MySQL`;
   }
 
   if (filtered.length === 0) {
@@ -646,34 +776,50 @@ function renderBatchesTable(filterMedicineId = null) {
   }
 
   tbody.innerHTML = filtered.map(b => {
-    const med = MockDB.medicines.find(m => m.id === b.medicineId);
-    const status = getBatchStatus(b);
+    const medName = b.medicineName || (MockDB.medicines.find(m => m.id === b.medicineId)?.name) || 'Unknown';
+    const days = b.daysToExpiry !== undefined ? b.daysToExpiry : getDaysUntil(b.expiryDate);
+    const stock = parseInt(b.stock !== undefined ? b.stock : b.quantity, 10) || 0;
+    const price = parseFloat(b.sellingPrice || b.unitPrice || 0);
+    const cost = parseFloat(b.purchasePrice || (price * 0.7) || 0);
 
+    let statusType = "in-stock";
+    let statusLabel = "Good / Valid";
     let badgeClass = "badge-in-stock";
-    if (status.type === "expired") badgeClass = "badge-expired";
-    else if (status.type === "warning") badgeClass = "badge-low-stock";
-    else if (status.type === "low-stock") badgeClass = "badge-critical";
+
+    if (days < 0) {
+      statusType = "expired";
+      statusLabel = "Expired Batch";
+      badgeClass = "badge-expired";
+    } else if (days <= 30) {
+      statusType = "warning";
+      statusLabel = `Expiring Soon (${days}d)`;
+      badgeClass = "badge-low-stock";
+    } else if (stock <= 30) {
+      statusType = "low-stock";
+      statusLabel = `Low Stock (${stock} left)`;
+      badgeClass = "badge-critical";
+    }
 
     return `
       <tr>
         <td><span class="font-mono font-bold">${b.batchNumber}</span></td>
-        <td><strong>${med ? med.name : 'Unknown'}</strong></td>
-        <td>${b.expiryDate}</td>
+        <td><strong>${medName}</strong></td>
+        <td>${b.expiryDate ? b.expiryDate.slice(0, 10) : '-'}</td>
         <td>
-          <span style="font-weight:600; color:${status.days < 0 ? 'var(--danger)' : status.days <= 30 ? 'var(--warning)' : 'inherit'};">
-            ${status.days < 0 ? `Expired ${Math.abs(status.days)}d ago` : `${status.days}d remaining`}
+          <span style="font-weight:600; color:${days < 0 ? 'var(--danger)' : days <= 30 ? 'var(--warning)' : 'inherit'};">
+            ${days < 0 ? `Expired ${Math.abs(days)}d ago` : `${days}d remaining`}
           </span>
         </td>
-        <td>₹${b.purchasePrice.toFixed(2)}</td>
-        <td><strong>₹${b.sellingPrice.toFixed(2)}</strong></td>
-        <td><strong>${b.stock}</strong> <span style="font-size:0.75rem; color:var(--text-muted);">(Min ${b.reorderLevel})</span></td>
-        <td><span class="badge-status ${badgeClass}">${status.label}</span></td>
+        <td>₹${cost.toFixed(2)}</td>
+        <td><strong>₹${price.toFixed(2)}</strong></td>
+        <td><strong>${stock}</strong> <span style="font-size:0.75rem; color:var(--text-muted);">(Min ${b.reorderLevel || 30})</span></td>
+        <td><span class="badge-status ${badgeClass}">${b.statusLabel || statusLabel}</span></td>
         <td>
           <div class="action-btn-group">
             <button class="btn btn-outline btn-sm" onclick="openEditBatchModal(${b.id})" title="Edit Stock / Price">
               Edit
             </button>
-            <button class="btn btn-primary btn-sm" onclick="prepareSaleFromBatch(${b.id})" ${status.type === 'expired' || b.stock === 0 ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''} title="Dispense Medication">
+            <button class="btn btn-primary btn-sm" onclick="prepareSaleFromBatch(${b.id})" ${statusType === 'expired' || stock === 0 ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''} title="Dispense Medication">
               Dispense
             </button>
           </div>
@@ -966,6 +1112,15 @@ function initModalsAndForms() {
     });
   }
 
+  // Modal 6: Add Batch Form (Phase 3D)
+  const formAddBatch = document.getElementById("form-add-batch");
+  if (formAddBatch) {
+    formAddBatch.addEventListener("submit", (e) => {
+      e.preventDefault();
+      saveNewBatch();
+    });
+  }
+
   // Sale Modal Dynamic Price Calculation
   const saleBatchSelect = document.getElementById("sale-batch-select");
   const saleQtyInput = document.getElementById("sale-quantity-input");
@@ -996,26 +1151,8 @@ function closeModal(modalId) {
 }
 
 function populateDropdownOptions() {
-  // Category dropdown in Add Medicine
-  const catSelect = document.getElementById("new-med-category");
-  if (catSelect) {
-    catSelect.innerHTML = MockDB.categories.map(c => `<option value="${c.id}">${c.name}</option>`).join("");
-  }
-
-  // Category filter dropdown in Medicines View
-  const catFilter = document.getElementById("medicine-category-filter");
-  if (catFilter) {
-    const currentVal = catFilter.value;
-    catFilter.innerHTML = `<option value="">All Categories</option>` +
-      MockDB.categories.map(c => `<option value="${c.id}">${c.name}</option>`).join("");
-    catFilter.value = currentVal;
-  }
-
-  // Category dropdown in Edit Medicine Modal
-  const editCatSelect = document.getElementById("edit-med-category");
-  if (editCatSelect) {
-    editCatSelect.innerHTML = MockDB.categories.map(c => `<option value="${c.id}">${c.name}</option>`).join("");
-  }
+  // Populate category dropdowns (uses live MySQL categories if loaded, else fallback)
+  populateCategoryDropdowns();
 
   // Batch dropdown in Record Sale
   const batchSelect = document.getElementById("sale-batch-select");
@@ -1076,8 +1213,12 @@ function updateSaleModalCalculations() {
 // 6. Action Handlers (Add, Edit, View, Sale, Restock)
 // =====================================================================
 
-// Action: Save New Medicine and Batch (With Client-Side Validation)
-function saveNewMedicineAndBatch() {
+// Action: Save New Medicine and Batch (Connected to MySQL POST /api/medicines)
+async function saveNewMedicineAndBatch() {
+  const form = document.getElementById("form-add-medicine");
+  const submitBtn = form ? form.querySelector('button[type="submit"]') : null;
+  const originalBtnText = submitBtn ? submitBtn.innerHTML : "Save to Inventory";
+
   const nameInput = document.getElementById("new-med-name");
   const genericInput = document.getElementById("new-med-generic");
   const catInput = document.getElementById("new-med-category");
@@ -1092,7 +1233,7 @@ function saveNewMedicineAndBatch() {
   const reorderInput = document.getElementById("new-batch-reorder");
 
   // Reset error displays
-  document.querySelectorAll(".field-error").forEach(el => el.classList.remove("active"));
+  document.querySelectorAll("#modal-add-medicine .field-error").forEach(el => el.classList.remove("active"));
 
   let isValid = true;
 
@@ -1126,51 +1267,109 @@ function saveNewMedicineAndBatch() {
     isValid = false;
   }
 
-  const stock = parseInt(stockInput.value);
+  const stock = parseInt(stockInput.value, 10);
   if (isNaN(stock) || stock < 0) {
     document.getElementById("err-new-batch-stock").classList.add("active");
     isValid = false;
   }
 
-  const reorderLevel = parseInt(reorderInput.value);
+  const reorderLevel = parseInt(reorderInput.value, 10);
   if (isNaN(reorderLevel) || reorderLevel < 1) {
     document.getElementById("err-new-batch-reorder").classList.add("active");
     isValid = false;
   }
 
   if (!isValid) {
-    showToast("Please correct validation errors highlighted in the form.", "error");
+    showToast("Please correct the validation errors highlighted in the form.", "error");
     return;
   }
 
-  // Create new unique IDs
-  const newMedId = 100 + MockDB.medicines.length + 1;
-  const newBatchId = 500 + MockDB.batches.length + 1;
+  const categoryId = catInput && catInput.value ? parseInt(catInput.value, 10) : null;
+  const genericVal = genericInput ? genericInput.value.trim() : "";
 
-  MockDB.medicines.push({
-    id: newMedId,
-    name,
-    generic: genericInput.value.trim() || name,
-    categoryId: parseInt(catInput.value),
-    form: formInput.value,
-    dosage: dosageInput.value.trim() || "Standard"
-  });
+  // Prevent accidental duplicate submissions while request is in progress
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = `
+      <span class="pulse-dot" style="width:10px; height:10px; margin-right:6px; display:inline-block;"></span>
+      Saving to MySQL...
+    `;
+  }
 
-  MockDB.batches.push({
-    id: newBatchId,
-    medicineId: newMedId,
-    batchNumber,
-    expiryDate,
-    purchasePrice,
-    sellingPrice,
-    stock,
-    reorderLevel
-  });
+  try {
+    const payload = {
+      name: name,
+      medicine_name: name,
+      generic: genericVal,
+      manufacturer: genericVal || "Standard Dispensary",
+      categoryId: categoryId,
+      category_id: categoryId,
+      batchNumber: batchNumber,
+      batch_number: batchNumber,
+      expiryDate: expiryDate,
+      expiry_date: expiryDate,
+      unitPrice: sellingPrice,
+      sellingPrice: sellingPrice,
+      purchasePrice: purchasePrice,
+      quantity: stock,
+      stock: stock,
+      reorderLevel: reorderLevel
+    };
 
-  closeModal("modal-add-medicine");
-  document.getElementById("form-add-medicine").reset();
-  refreshAllViews();
-  showToast(`Medicine "${name}" and Batch #${batchNumber} added successfully to inventory!`, "success");
+    const response = await fetch("/api/medicines", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const result = await response.json();
+
+    if (!response.ok || !result.success) {
+      throw new Error(result.error || `HTTP ${response.status}: Failed to register medicine`);
+    }
+
+    // Keep MockDB in sync for secondary views (e.g. Batches view)
+    const createdId = result.data ? result.data.id : (100 + MockDB.medicines.length + 1);
+    MockDB.medicines.push({
+      id: createdId,
+      name,
+      generic: genericVal || name,
+      categoryId: categoryId || 1,
+      form: formInput ? formInput.value : "Tablet",
+      dosage: (dosageInput && dosageInput.value.trim()) || "Standard"
+    });
+
+    if (result.data && result.data.initialBatch) {
+      MockDB.batches.push({
+        id: result.data.initialBatch.id,
+        medicineId: createdId,
+        batchNumber,
+        expiryDate,
+        purchasePrice,
+        sellingPrice,
+        stock,
+        reorderLevel
+      });
+    }
+
+    closeModal("modal-add-medicine");
+    form.reset();
+    showToast(`Medicine "${name}" and Batch #${batchNumber} saved to MySQL successfully!`, "success");
+
+    // Refresh real medicines from MySQL
+    await fetchLiveMedicines();
+    refreshAllViews();
+  } catch (err) {
+    console.error("Error adding medicine to MySQL:", err);
+    showToast(err.message || "Failed to register medicine in MySQL.", "error");
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = originalBtnText;
+    }
+  }
 }
 
 // Action: View Medicine Formulation Details (Phase 3C)
@@ -1221,79 +1420,263 @@ function openViewMedicineModal(medId) {
   openModal("modal-view-medicine");
 }
 
-// Action: Open Edit Medicine Modal
+// Action: Open Edit Medicine Modal (Populates from MySQL liveMedicines)
 function openEditMedicineModal(medId) {
-  const med = MockDB.medicines.find(m => m.id === medId);
-  if (!med) return;
+  const liveMed = liveMedicines.find(m => m.id === medId);
+  const mockMed = MockDB.medicines.find(m => m.id === medId);
+  const med = liveMed || mockMed;
+  if (!med) {
+    showToast("Medicine record not found.", "error");
+    return;
+  }
 
   document.getElementById("edit-med-id").value = med.id;
-  document.getElementById("edit-med-name").value = med.name;
-  document.getElementById("edit-med-generic").value = med.generic;
-  document.getElementById("edit-med-category").value = med.categoryId;
-  document.getElementById("edit-med-form").value = med.form;
-  document.getElementById("edit-med-dosage").value = med.dosage;
+  document.getElementById("edit-med-name").value = med.name || "";
+  document.getElementById("edit-med-generic").value = med.manufacturer || med.generic || "";
+
+  const editCatSelect = document.getElementById("edit-med-category");
+  if (editCatSelect && med.categoryId) {
+    editCatSelect.value = med.categoryId;
+  }
+
+  if (document.getElementById("edit-med-form")) {
+    document.getElementById("edit-med-form").value = med.form || "Tablet";
+  }
+  if (document.getElementById("edit-med-dosage")) {
+    document.getElementById("edit-med-dosage").value = med.dosage || "Standard";
+  }
 
   document.querySelectorAll("#modal-edit-medicine .field-error").forEach(el => el.classList.remove("active"));
   openModal("modal-edit-medicine");
 }
 
-// Action: Save Edited Medicine Formulation
-function saveEditedMedicine() {
-  const medId = parseInt(document.getElementById("edit-med-id").value);
+// Action: Save Edited Medicine Formulation (Connected to MySQL PUT /api/medicines/:id)
+async function saveEditedMedicine() {
+  const form = document.getElementById("form-edit-medicine");
+  const submitBtn = form ? form.querySelector('button[type="submit"]') : null;
+  const originalBtnText = submitBtn ? submitBtn.innerHTML : "Update Medicine";
+
+  const medId = parseInt(document.getElementById("edit-med-id").value, 10);
   const name = document.getElementById("edit-med-name").value.trim();
   const generic = document.getElementById("edit-med-generic").value.trim();
-  const categoryId = parseInt(document.getElementById("edit-med-category").value);
-  const form = document.getElementById("edit-med-form").value;
-  const dosage = document.getElementById("edit-med-dosage").value.trim();
+  const catSelect = document.getElementById("edit-med-category");
+  const categoryId = catSelect && catSelect.value ? parseInt(catSelect.value, 10) : null;
+  const formVal = document.getElementById("edit-med-form") ? document.getElementById("edit-med-form").value : "Tablet";
+  const dosageVal = document.getElementById("edit-med-dosage") ? document.getElementById("edit-med-dosage").value.trim() : "Standard";
 
   document.querySelectorAll("#modal-edit-medicine .field-error").forEach(el => el.classList.remove("active"));
 
   if (!name) {
-    document.getElementById("err-edit-med-name").classList.add("active");
+    const errEl = document.getElementById("err-edit-med-name");
+    if (errEl) errEl.classList.add("active");
+    showToast("Medicine name cannot be empty.", "error");
     return;
   }
-  if (!generic) {
-    document.getElementById("err-edit-med-generic").classList.add("active");
-    return;
+
+  // Prevent accidental duplicate submissions while request is in progress
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = `
+      <span class="pulse-dot" style="width:10px; height:10px; margin-right:6px; display:inline-block;"></span>
+      Updating MySQL...
+    `;
   }
 
-  const med = MockDB.medicines.find(m => m.id === medId);
-  if (!med) return;
+  try {
+    const response = await fetch(`/api/medicines/${medId}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        name: name,
+        medicine_name: name,
+        categoryId: categoryId,
+        category_id: categoryId,
+        manufacturer: generic || "Standard Dispensary",
+        generic: generic
+      })
+    });
 
-  med.name = name;
-  med.generic = generic;
-  med.categoryId = categoryId;
-  med.form = form;
-  med.dosage = dosage || "Standard";
+    const result = await response.json();
 
-  closeModal("modal-edit-medicine");
-  refreshAllViews();
-  showToast(`Medicine formulation "#MED-${medId}" updated successfully!`, "success");
+    if (!response.ok || !result.success) {
+      throw new Error(result.error || `HTTP ${response.status}: Failed to update medicine`);
+    }
+
+    // Keep MockDB synchronized for secondary views
+    const mockMed = MockDB.medicines.find(m => m.id === medId);
+    if (mockMed) {
+      mockMed.name = name;
+      mockMed.generic = generic;
+      mockMed.categoryId = categoryId;
+      mockMed.form = formVal;
+      mockMed.dosage = dosageVal;
+    }
+
+    closeModal("modal-edit-medicine");
+    showToast(`Medicine "#MED-${medId} (${name})" updated in MySQL successfully!`, "success");
+
+    // Refresh real medicines from MySQL
+    await fetchLiveMedicines();
+    refreshAllViews();
+  } catch (err) {
+    console.error("Error updating medicine in MySQL:", err);
+    showToast(err.message || "Failed to update medicine in MySQL.", "error");
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = originalBtnText;
+    }
+  }
 }
 
-// Action: Open Edit Batch Modal
+// Action: Open Add Batch Modal (Phase 3D)
+function openAddBatchModal(preselectedMedId = null) {
+  const medSelect = document.getElementById("add-batch-medicine-select");
+  if (medSelect) {
+    const meds = liveMedicines.length > 0 ? liveMedicines : MockDB.medicines;
+    medSelect.innerHTML = `<option value="">-- Select Registered Medicine --</option>` +
+      meds.map(m => `<option value="${m.id}" ${preselectedMedId === m.id ? 'selected' : ''}>${m.name} (${m.categoryName || 'General'})</option>`).join("");
+  }
+
+  document.querySelectorAll("#modal-add-batch .field-error").forEach(el => el.classList.remove("active"));
+  document.getElementById("add-batch-number").value = "";
+  document.getElementById("add-batch-expiry").value = "";
+  document.getElementById("add-batch-price").value = "5.00";
+  document.getElementById("add-batch-stock").value = "100";
+
+  openModal("modal-add-batch");
+}
+
+// Action: Save New Batch to MySQL (Phase 3D)
+async function saveNewBatch() {
+  const form = document.getElementById("form-add-batch");
+  const submitBtn = form ? form.querySelector('button[type="submit"]') : null;
+  const originalBtnText = submitBtn ? submitBtn.innerHTML : "Save Batch to MySQL";
+
+  const medSelect = document.getElementById("add-batch-medicine-select");
+  const numInput = document.getElementById("add-batch-number");
+  const expInput = document.getElementById("add-batch-expiry");
+  const priceInput = document.getElementById("add-batch-price");
+  const stockInput = document.getElementById("add-batch-stock");
+
+  document.querySelectorAll("#modal-add-batch .field-error").forEach(el => el.classList.remove("active"));
+
+  let isValid = true;
+  const medicineId = medSelect ? parseInt(medSelect.value, 10) : null;
+  if (!medicineId) {
+    document.getElementById("err-add-batch-med").classList.add("active");
+    isValid = false;
+  }
+
+  const batchNumber = numInput ? numInput.value.trim().toUpperCase() : "";
+  if (!batchNumber) {
+    document.getElementById("err-add-batch-number").classList.add("active");
+    isValid = false;
+  }
+
+  const expiryDate = expInput ? expInput.value : "";
+  if (!expiryDate) {
+    document.getElementById("err-add-batch-expiry").classList.add("active");
+    isValid = false;
+  }
+
+  const unitPrice = priceInput ? parseFloat(priceInput.value) : 0;
+  if (isNaN(unitPrice) || unitPrice < 0) {
+    document.getElementById("err-add-batch-price").classList.add("active");
+    isValid = false;
+  }
+
+  const stock = stockInput ? parseInt(stockInput.value, 10) : 0;
+  if (isNaN(stock) || stock < 0) {
+    document.getElementById("err-add-batch-stock").classList.add("active");
+    isValid = false;
+  }
+
+  if (!isValid) {
+    showToast("Please correct the validation errors in the form.", "error");
+    return;
+  }
+
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = `
+      <span class="pulse-dot" style="width:10px; height:10px; margin-right:6px; display:inline-block;"></span>
+      Saving to MySQL...
+    `;
+  }
+
+  try {
+    const response = await fetch("/api/batches", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        medicineId,
+        batchNumber,
+        expiryDate,
+        unitPrice,
+        quantity: stock
+      })
+    });
+
+    const result = await response.json();
+    if (!response.ok || !result.success) {
+      throw new Error(result.error || `HTTP ${response.status}: Failed to register batch`);
+    }
+
+    closeModal("modal-add-batch");
+    form.reset();
+    showToast(`Batch #${batchNumber} saved to MySQL database successfully!`, "success");
+
+    // Refresh real batches & medicines from MySQL
+    await fetchLiveBatches();
+    await fetchLiveMedicines();
+    refreshAllViews();
+  } catch (err) {
+    console.error("Error creating batch in MySQL:", err);
+    showToast(err.message || "Failed to register batch in MySQL.", "error");
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = originalBtnText;
+    }
+  }
+}
+
+// Action: Open Edit Batch Modal (Populates from MySQL liveBatches)
 function openEditBatchModal(batchId) {
-  const batch = MockDB.batches.find(b => b.id === batchId);
-  if (!batch) return;
+  const liveBatch = liveBatches.find(b => b.id === batchId);
+  const mockBatch = MockDB.batches.find(b => b.id === batchId);
+  const batch = liveBatch || mockBatch;
+  if (!batch) {
+    showToast("Batch record not found.", "error");
+    return;
+  }
 
   document.getElementById("edit-batch-id").value = batch.id;
   document.getElementById("edit-batch-number").value = batch.batchNumber;
-  document.getElementById("edit-batch-expiry").value = batch.expiryDate;
-  document.getElementById("edit-batch-selling").value = batch.sellingPrice.toFixed(2);
-  document.getElementById("edit-batch-stock").value = batch.stock;
-  document.getElementById("edit-batch-reorder").value = batch.reorderLevel;
+  document.getElementById("edit-batch-expiry").value = batch.expiryDate ? batch.expiryDate.slice(0, 10) : "";
+  document.getElementById("edit-batch-selling").value = parseFloat(batch.sellingPrice || batch.unitPrice || 0).toFixed(2);
+  document.getElementById("edit-batch-stock").value = batch.stock !== undefined ? batch.stock : batch.quantity;
+  document.getElementById("edit-batch-reorder").value = batch.reorderLevel || 30;
 
   document.querySelectorAll("#modal-edit-batch .field-error").forEach(el => el.classList.remove("active"));
   openModal("modal-edit-batch");
 }
 
-// Action: Save Edited Batch Details
-function saveEditedBatch() {
-  const batchId = parseInt(document.getElementById("edit-batch-id").value);
+// Action: Save Edited Batch Details (Connected to MySQL PUT /api/batches/:id)
+async function saveEditedBatch() {
+  const form = document.getElementById("form-edit-batch");
+  const submitBtn = form ? form.querySelector('button[type="submit"]') : null;
+  const originalBtnText = submitBtn ? submitBtn.innerHTML : "Save Batch Changes";
+
+  const batchId = parseInt(document.getElementById("edit-batch-id").value, 10);
+  const batchNumber = document.getElementById("edit-batch-number").value;
   const expiryDate = document.getElementById("edit-batch-expiry").value;
   const sellingPrice = parseFloat(document.getElementById("edit-batch-selling").value);
-  const stock = parseInt(document.getElementById("edit-batch-stock").value);
-  const reorderLevel = parseInt(document.getElementById("edit-batch-reorder").value);
+  const stock = parseInt(document.getElementById("edit-batch-stock").value, 10);
+  const reorderLevel = parseInt(document.getElementById("edit-batch-reorder").value, 10);
 
   document.querySelectorAll("#modal-edit-batch .field-error").forEach(el => el.classList.remove("active"));
 
@@ -1315,17 +1698,56 @@ function saveEditedBatch() {
     return;
   }
 
-  const batch = MockDB.batches.find(b => b.id === batchId);
-  if (!batch) return;
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = `
+      <span class="pulse-dot" style="width:10px; height:10px; margin-right:6px; display:inline-block;"></span>
+      Updating MySQL...
+    `;
+  }
 
-  batch.expiryDate = expiryDate;
-  batch.sellingPrice = sellingPrice;
-  batch.stock = stock;
-  batch.reorderLevel = reorderLevel || 10;
+  try {
+    const response = await fetch(`/api/batches/${batchId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        batchNumber,
+        expiryDate,
+        unitPrice: sellingPrice,
+        quantity: stock
+      })
+    });
 
-  closeModal("modal-edit-batch");
-  refreshAllViews();
-  showToast(`Batch "${batch.batchNumber}" updated. Dashboard metrics recalculated.`, "success");
+    const result = await response.json();
+    if (!response.ok || !result.success) {
+      throw new Error(result.error || `HTTP ${response.status}: Failed to update batch`);
+    }
+
+    // Keep MockDB in sync
+    const mockBatch = MockDB.batches.find(b => b.id === batchId);
+    if (mockBatch) {
+      mockBatch.expiryDate = expiryDate;
+      mockBatch.sellingPrice = sellingPrice;
+      mockBatch.stock = stock;
+      mockBatch.reorderLevel = reorderLevel || 10;
+    }
+
+    closeModal("modal-edit-batch");
+    showToast(`Batch #${batchNumber} updated in MySQL successfully!`, "success");
+
+    // Refresh real batches & medicines from MySQL
+    await fetchLiveBatches();
+    await fetchLiveMedicines();
+    refreshAllViews();
+  } catch (err) {
+    console.error("Error updating batch in MySQL:", err);
+    showToast(err.message || "Failed to update batch in MySQL.", "error");
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = originalBtnText;
+    }
+  }
 }
 
 // Action: Quick Restock (+50 Units)
