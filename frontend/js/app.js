@@ -170,6 +170,8 @@ document.addEventListener("DOMContentLoaded", () => {
   fetchLiveReports(); // Phase 4B: Fetch stored procedure reports from MySQL
   fetchLiveSales(); // Phase 4C: Fetch real sales ledger from MySQL
   fetchLivePatients(); // Phase 4C: Fetch real patients from MySQL
+  fetchLiveDoctors(); // Phase 4D: Fetch real doctors from MySQL
+  fetchLivePrescriptions(); // Phase 4D: Fetch real prescriptions from MySQL
 });
 
 // Sidebar Navigation
@@ -191,7 +193,7 @@ function initNavigation() {
       const activeSec = document.getElementById(`view-${targetView}`);
       if (activeSec) activeSec.classList.add("active");
 
-      // Phase 3C, 3D, 4B & 4C: Refresh live records when navigating tabs
+      // Phase 3C, 3D, 4B, 4C & 4D: Refresh live records when navigating tabs
       if (targetView === "medicines") {
         fetchLiveMedicines();
       } else if (targetView === "batches") {
@@ -201,6 +203,10 @@ function initNavigation() {
       } else if (targetView === "sales") {
         fetchLiveSales();
         fetchLivePatients();
+      } else if (targetView === "prescriptions") {
+        fetchLivePrescriptions();
+        fetchLivePatients();
+        fetchLiveDoctors();
       }
     });
   });
@@ -452,7 +458,7 @@ function renderLowStockAlertList() {
 }
 
 // =====================================================================
-// Phase 3C, 3D, 4B & 4C: Live MySQL State & Fetchers
+// Phase 3C, 3D, 4B, 4C & 4D: Live MySQL State & Fetchers
 // =====================================================================
 let liveMedicines = [];
 let liveCategories = [];
@@ -460,6 +466,8 @@ let liveBatches = [];
 let liveReports = { lowStock: [], expiry: [] };
 let liveSales = [];
 let livePatients = [];
+let liveDoctors = [];
+let livePrescriptions = [];
 let isMedicinesLoading = false;
 let medicinesApiError = null;
 let isBatchesLoading = false;
@@ -468,6 +476,44 @@ let isReportsLoading = false;
 let reportsApiError = null;
 let isSalesLoading = false;
 let salesApiError = null;
+let isPrescriptionsLoading = false;
+let prescriptionsApiError = null;
+
+async function fetchLivePrescriptions() {
+  isPrescriptionsLoading = true;
+  prescriptionsApiError = null;
+  renderPrescriptionsView();
+
+  try {
+    const res = await fetch('/api/prescriptions');
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: Failed to reach Prescriptions API`);
+    }
+    const json = await res.json();
+    livePrescriptions = json.data || [];
+    isPrescriptionsLoading = false;
+    renderPrescriptionsView();
+  } catch (err) {
+    console.error('Phase 4D Prescriptions API Error:', err);
+    isPrescriptionsLoading = false;
+    prescriptionsApiError = err.message || 'Network / Database Error';
+    livePrescriptions = [];
+    renderPrescriptionsView();
+  }
+}
+
+async function fetchLiveDoctors() {
+  try {
+    const res = await fetch('/api/doctors');
+    if (res.ok) {
+      const json = await res.json();
+      liveDoctors = json.data || [];
+      populateDoctorDropdownOptions();
+    }
+  } catch (err) {
+    console.warn('Could not fetch doctors from API:', err.message);
+  }
+}
 
 async function fetchLiveSales() {
   isSalesLoading = true;
@@ -496,11 +542,19 @@ async function fetchLiveSales() {
 
 async function fetchLivePatients() {
   try {
-    const res = await fetch('/api/sales/patients');
+    const res = await fetch('/api/patients');
     if (res.ok) {
       const json = await res.json();
       livePatients = json.data || [];
       populatePatientDropdownOptions();
+    } else {
+      // Fallback
+      const fb = await fetch('/api/sales/patients');
+      if (fb.ok) {
+        const json = await fb.json();
+        livePatients = json.data || [];
+        populatePatientDropdownOptions();
+      }
     }
   } catch (err) {
     console.warn('Could not fetch patients from API:', err.message);
@@ -586,15 +640,35 @@ function populateBatchDropdownOptions() {
 
 function populatePatientDropdownOptions() {
   const patientSelect = document.getElementById("sale-patient-select");
-  if (!patientSelect) return;
-
-  const currentVal = patientSelect.value;
+  const newRxPatientSelect = document.getElementById("new-rx-patient");
   const patients = livePatients.length > 0 ? livePatients : MockDB.patients;
 
-  patientSelect.innerHTML = `<option value="">Walk-in Customer (Over-The-Counter)</option>` +
-    patients.map(p => `<option value="${p.id}">${p.name} ${p.phone ? `(${p.phone})` : ''}</option>`).join("");
+  if (patientSelect) {
+    const currentVal = patientSelect.value;
+    patientSelect.innerHTML = `<option value="">Walk-in Customer (Over-The-Counter)</option>` +
+      patients.map(p => `<option value="${p.id}">${p.name} ${p.phone ? `(${p.phone})` : ''}</option>`).join("");
+    if (currentVal) patientSelect.value = currentVal;
+  }
 
-  if (currentVal) patientSelect.value = currentVal;
+  if (newRxPatientSelect) {
+    const currentVal = newRxPatientSelect.value;
+    newRxPatientSelect.innerHTML = `<option value="">-- Choose Patient --</option>` +
+      patients.map(p => `<option value="${p.id}">${p.name} ${p.phone ? `(${p.phone})` : ''}</option>`).join("");
+    if (currentVal) newRxPatientSelect.value = currentVal;
+  }
+}
+
+function populateDoctorDropdownOptions() {
+  const rxDocSelect = document.getElementById("new-rx-doctor");
+  if (!rxDocSelect) return;
+
+  const currentVal = rxDocSelect.value;
+  const docs = liveDoctors.length > 0 ? liveDoctors : MockDB.doctors;
+
+  rxDocSelect.innerHTML = `<option value="">-- Choose Prescribing Doctor --</option>` +
+    docs.map(d => `<option value="${d.id}">${d.name} (${d.specialization || 'Physician'})</option>`).join("");
+
+  if (currentVal) rxDocSelect.value = currentVal;
 }
 
 
@@ -926,61 +1000,87 @@ function renderBatchesTable(filterMedicineId = null) {
   }).join("");
 }
 
-// Prescriptions View with Search & Status Filter
+// Prescriptions View with Search (Connected to live MySQL /api/prescriptions)
 function renderPrescriptionsView() {
   const container = document.getElementById("prescriptions-cards-container");
   if (!container) return;
 
   const searchInput = document.getElementById("rx-search-input");
-  const statusFilter = document.getElementById("rx-status-filter");
-
+  const countDisplay = document.getElementById("rx-count-display");
   const query = searchInput ? searchInput.value.toLowerCase().trim() : "";
-  const selectedStatus = statusFilter ? statusFilter.value : "";
 
-  let filtered = MockDB.prescriptions.filter(rx => {
-    const patient = MockDB.patients.find(p => p.id === rx.patientId);
-    const doctor = MockDB.doctors.find(d => d.id === rx.doctorId);
-    const patientName = patient ? patient.name.toLowerCase() : "";
-    const doctorName = doctor ? doctor.name.toLowerCase() : "";
-    const diag = rx.diagnosis.toLowerCase();
-    const rxNum = rx.rxNumber.toLowerCase();
-
-    const matchesSearch = query === "" || 
-      patientName.includes(query) || 
-      doctorName.includes(query) || 
-      diag.includes(query) ||
-      rxNum.includes(query);
-
-    const matchesStatus = selectedStatus === "" || rx.status === selectedStatus;
-    return matchesSearch && matchesStatus;
-  });
-
-  if (filtered.length === 0) {
+  // State 1: Loading from MySQL
+  if (isPrescriptionsLoading) {
+    if (countDisplay) countDisplay.textContent = "Connecting to MySQL...";
     container.innerHTML = `
       <div class="content-card">
         <div class="empty-table-state">
-          <svg viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path></svg>
-          <div class="empty-table-title">No prescriptions found</div>
-          <div class="empty-table-sub">Try searching for a different patient, physician, or status.</div>
+          <div class="pulse-dot" style="margin:0 auto 12px; width:16px; height:16px;"></div>
+          <div class="empty-table-title">Loading Doctor Prescriptions...</div>
+          <div class="empty-table-sub">Querying prescription ledger and clinical orders from MySQL <code>pharmacy_db</code></div>
         </div>
       </div>
     `;
     return;
   }
 
+  // State 2: Error (Never display fake data when API fails)
+  if (prescriptionsApiError) {
+    if (countDisplay) countDisplay.textContent = "Database Error";
+    container.innerHTML = `
+      <div class="content-card">
+        <div class="empty-table-state">
+          <svg viewBox="0 0 24 24" fill="none" style="stroke:var(--danger);"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+          <div class="empty-table-title" style="color:var(--danger);">Failed to Retrieve Prescriptions</div>
+          <div class="empty-table-sub">${prescriptionsApiError}</div>
+          <button class="btn btn-primary btn-sm" onclick="fetchLivePrescriptions()" style="margin-top:14px;">
+            🔄 Retry Database Query
+          </button>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  const rxData = livePrescriptions;
+
+  let filtered = rxData.filter(rx => {
+    const patientName = (rx.patientName || "").toLowerCase();
+    const patientPhone = (rx.patientPhone || "").toLowerCase();
+    const doctorName = (rx.doctorName || "").toLowerCase();
+    const doctorSpec = (rx.doctorSpecialization || "").toLowerCase();
+    const rxNum = (rx.rxNumber || "").toLowerCase();
+    const date = (rx.date || "").toLowerCase();
+
+    return query === "" || 
+      patientName.includes(query) || 
+      patientPhone.includes(query) ||
+      doctorName.includes(query) || 
+      doctorSpec.includes(query) ||
+      rxNum.includes(query) ||
+      date.includes(query);
+  });
+
+  if (countDisplay) {
+    countDisplay.textContent = `Showing ${filtered.length} of ${rxData.length} prescriptions from MySQL`;
+  }
+
+  // State 3: Empty State
+  if (filtered.length === 0) {
+    container.innerHTML = `
+      <div class="content-card">
+        <div class="empty-table-state">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path></svg>
+          <div class="empty-table-title">${query ? 'No matching prescriptions found' : 'No Prescriptions Recorded in Database'}</div>
+          <div class="empty-table-sub">${query ? 'Try searching for a different patient, physician, or Rx number.' : 'Click "+ Issue New Prescription" to record an official doctor prescription.'}</div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // State 4: Render Live MySQL Prescriptions
   container.innerHTML = filtered.map(rx => {
-    const patient = MockDB.patients.find(p => p.id === rx.patientId);
-    const doctor = MockDB.doctors.find(d => d.id === rx.doctorId);
-
-    const itemsList = rx.items.map(item => {
-      const med = MockDB.medicines.find(m => m.id === item.medicineId);
-      return `
-        <li style="padding: 6px 0; border-bottom: 1px dashed var(--border-light); font-size:0.83rem;">
-          <strong>${med ? med.name : 'Medicine'}</strong> — ${item.dosage} | ${item.frequency} | Qty: <strong>${item.qty}</strong>
-        </li>
-      `;
-    }).join("");
-
     return `
       <div class="content-card" style="margin-bottom: 18px;">
         <div class="card-header">
@@ -988,29 +1088,21 @@ function renderPrescriptionsView() {
             <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
             Prescription ${rx.rxNumber}
           </h3>
-          <span class="badge-status ${rx.status === 'Fulfilled' ? 'badge-in-stock' : 'badge-low-stock'}">${rx.status}</span>
+          <span class="badge-status badge-info">${rx.itemCount} Med(s) (${rx.totalQuantity} Units)</span>
         </div>
         <div style="padding: 16px 20px;">
           <div style="display:flex; justify-content:space-between; margin-bottom: 12px; font-size:0.85rem; flex-wrap:wrap; gap:8px;">
-            <div><strong>Patient:</strong> ${patient ? patient.name : 'Unknown'} (${patient ? patient.age : '-'}y, ${patient ? patient.gender : '-'})</div>
-            <div><strong>Doctor:</strong> ${doctor ? doctor.name : 'Unknown'} (${doctor ? doctor.specialization : ''})</div>
-            <div><strong>Date:</strong> ${rx.date}</div>
-          </div>
-          <p style="font-size:0.82rem; color:var(--text-muted); margin-bottom: 12px;"><strong>Diagnosis:</strong> ${rx.diagnosis}</p>
-          <div style="background-color:#f8fafc; padding:12px 16px; border-radius:var(--radius-md); border:1px solid var(--border);">
-            <div style="font-size:0.75rem; text-transform:uppercase; font-weight:700; color:var(--text-muted); margin-bottom:6px;">Rx Medications:</div>
-            <ul style="list-style:none; padding:0; margin:0;">
-              ${itemsList}
-            </ul>
+            <div><strong>Patient:</strong> ${rx.patientName} ${rx.patientPhone ? `<span style="color:var(--text-muted);">(${rx.patientPhone})</span>` : ''}</div>
+            <div><strong>Prescribing Doctor:</strong> ${rx.doctorName} <span style="color:var(--text-muted); font-size:0.8rem;">(${rx.doctorSpecialization || 'Physician'})</span></div>
+            <div><strong>Prescription Date:</strong> <span class="font-mono">${rx.date}</span></div>
           </div>
           <div style="margin-top:14px; display:flex; justify-content:flex-end; gap:10px;">
-            ${rx.status === 'Active' ? `
-              <button class="btn btn-primary btn-sm" onclick="dispensePrescription(${rx.id})">
-                Dispense Prescription
-              </button>
-            ` : `
-              <span style="font-size:0.8rem; color:var(--success); font-weight:600;">✓ Fully Dispensed & Billed</span>
-            `}
+            <button class="btn btn-outline btn-sm" onclick="showPrescriptionDetails(${rx.id})">
+              🔍 View Rx Details & Items
+            </button>
+            <button class="btn btn-primary btn-sm" onclick="prepareDispenseFromPrescription(${rx.id})">
+              💊 Dispense in POS
+            </button>
           </div>
         </div>
       </div>
@@ -1349,6 +1441,15 @@ function initModalsAndForms() {
     saleQtyInput.addEventListener("input", updateSaleModalCalculations);
   }
 
+  // Modal 7: Create Prescription Form (Phase 4D)
+  const formCreateRx = document.getElementById("form-create-prescription");
+  if (formCreateRx) {
+    formCreateRx.addEventListener("submit", (e) => {
+      e.preventDefault();
+      saveNewPrescription();
+    });
+  }
+
   // View modal "Edit Formulation" button shortcut
   const btnViewMedEdit = document.getElementById("btn-view-med-edit");
   if (btnViewMedEdit) {
@@ -1374,6 +1475,7 @@ function populateDropdownOptions() {
   populateCategoryDropdowns();
   populateBatchDropdownOptions();
   populatePatientDropdownOptions();
+  populateDoctorDropdownOptions();
 }
 
 // Dynamic Bill Calculator in POS Modal (Derived from MySQL live batches)
@@ -2069,14 +2171,302 @@ async function executeSaleTransaction() {
   }
 }
 
-// Action: Dispense Doctor Prescription
-function dispensePrescription(rxId) {
-  const rx = MockDB.prescriptions.find(r => r.id === rxId);
-  if (!rx) return;
+// =====================================================================
+// Phase 4D: Prescription Management Action Handlers
+// =====================================================================
 
-  rx.status = "Fulfilled";
-  refreshAllViews();
-  showToast(`Prescription ${rx.rxNumber} dispensed and marked as Fulfilled.`, "success");
+// Open Prescription Modal
+function openNewPrescriptionModal() {
+  const form = document.getElementById("form-create-prescription");
+  if (form) form.reset();
+
+  document.querySelectorAll("#modal-create-prescription .field-error").forEach(el => el.classList.remove("active"));
+
+  // Default date to today (YYYY-MM-DD)
+  const dateInput = document.getElementById("new-rx-date");
+  if (dateInput) {
+    const today = new Date().toISOString().slice(0, 10);
+    dateInput.value = today;
+  }
+
+  // Populate patient and doctor dropdowns
+  populatePatientDropdownOptions();
+  populateDoctorDropdownOptions();
+
+  // Reset items container and add 1 initial item row
+  const itemsContainer = document.getElementById("rx-items-container");
+  if (itemsContainer) {
+    itemsContainer.innerHTML = "";
+    addPrescriptionItemRow();
+  }
+
+  openModal("modal-create-prescription");
+}
+
+// Add medication row to prescription form
+function addPrescriptionItemRow() {
+  const container = document.getElementById("rx-items-container");
+  if (!container) return;
+
+  const rowId = "rx-item-" + Date.now() + "-" + Math.floor(Math.random() * 1000);
+  const meds = liveMedicines.length > 0 ? liveMedicines : MockDB.medicines;
+  const medOptions = meds.map(m => 
+    `<option value="${m.id}">${m.name} ${m.dosage ? `(${m.dosage})` : ''}</option>`
+  ).join("");
+
+  const row = document.createElement("div");
+  row.className = "rx-item-row";
+  row.id = rowId;
+  row.style.cssText = "display:grid; grid-template-columns: 2fr 1.5fr 1fr 40px; gap:8px; align-items:center; background:#f8fafc; padding:8px 10px; border-radius:var(--radius-sm); border:1px solid var(--border);";
+  row.innerHTML = `
+    <div>
+      <label style="font-size:0.72rem; color:var(--text-muted); display:block; margin-bottom:2px;">Medicine *</label>
+      <select class="rx-item-medicine filter-input" style="width:100%; font-size:0.82rem; padding:6px 8px;" required>
+        <option value="">-- Select Medicine --</option>
+        ${medOptions}
+      </select>
+    </div>
+    <div>
+      <label style="font-size:0.72rem; color:var(--text-muted); display:block; margin-bottom:2px;">Dosage *</label>
+      <input type="text" class="rx-item-dosage filter-input" placeholder="e.g. 500mg twice daily" style="width:100%; font-size:0.82rem; padding:6px 8px;" required>
+    </div>
+    <div>
+      <label style="font-size:0.72rem; color:var(--text-muted); display:block; margin-bottom:2px;">Quantity *</label>
+      <input type="number" class="rx-item-qty filter-input" min="1" value="10" style="width:100%; font-size:0.82rem; padding:6px 8px;" required>
+    </div>
+    <div style="padding-top:16px;">
+      <button type="button" class="btn btn-outline btn-sm" onclick="removePrescriptionItemRow('${rowId}')" title="Remove medication" style="padding:6px; color:var(--danger); border-color:#fecaca;">
+        ✕
+      </button>
+    </div>
+  `;
+  container.appendChild(row);
+}
+
+// Remove medication row
+function removePrescriptionItemRow(rowId) {
+  const container = document.getElementById("rx-items-container");
+  if (!container) return;
+  const row = document.getElementById(rowId);
+  if (row) {
+    if (container.querySelectorAll(".rx-item-row").length <= 1) {
+      showToast("Prescription must include at least one medication.", "warning");
+      return;
+    }
+    row.remove();
+  }
+}
+
+// Save Prescription to MySQL POST /api/prescriptions
+async function saveNewPrescription() {
+  const form = document.getElementById("form-create-prescription");
+  const submitBtn = form ? form.querySelector('button[type="submit"]') : null;
+  const originalBtnText = submitBtn ? submitBtn.innerHTML : "Save Prescription";
+
+  const patientSelect = document.getElementById("new-rx-patient");
+  const doctorSelect = document.getElementById("new-rx-doctor");
+  const dateInput = document.getElementById("new-rx-date");
+
+  // Reset errors
+  document.querySelectorAll("#modal-create-prescription .field-error").forEach(el => el.classList.remove("active"));
+
+  let isValid = true;
+  const patientId = patientSelect ? parseInt(patientSelect.value, 10) : NaN;
+  if (isNaN(patientId) || patientId <= 0) {
+    document.getElementById("err-new-rx-patient").classList.add("active");
+    isValid = false;
+  }
+
+  const doctorId = doctorSelect ? parseInt(doctorSelect.value, 10) : NaN;
+  if (isNaN(doctorId) || doctorId <= 0) {
+    document.getElementById("err-new-rx-doctor").classList.add("active");
+    isValid = false;
+  }
+
+  const prescriptionDate = dateInput ? dateInput.value.trim() : "";
+  if (!prescriptionDate) {
+    document.getElementById("err-new-rx-date").classList.add("active");
+    isValid = false;
+  }
+
+  // Parse items
+  const itemRows = document.querySelectorAll("#rx-items-container .rx-item-row");
+  const items = [];
+  if (itemRows.length === 0) {
+    document.getElementById("err-new-rx-items").classList.add("active");
+    isValid = false;
+  } else {
+    itemRows.forEach(row => {
+      const medSelect = row.querySelector(".rx-item-medicine");
+      const dosageInput = row.querySelector(".rx-item-dosage");
+      const qtyInput = row.querySelector(".rx-item-qty");
+
+      const medId = medSelect ? parseInt(medSelect.value, 10) : NaN;
+      const dosage = dosageInput ? dosageInput.value.trim() : "";
+      const quantity = qtyInput ? parseInt(qtyInput.value, 10) : NaN;
+
+      if (isNaN(medId) || medId <= 0 || !dosage || isNaN(quantity) || quantity <= 0) {
+        isValid = false;
+      } else {
+        items.push({
+          medicineId: medId,
+          dosage: dosage,
+          quantity: quantity
+        });
+      }
+    });
+
+    if (items.length !== itemRows.length) {
+      document.getElementById("err-new-rx-items").classList.add("active");
+      isValid = false;
+    }
+  }
+
+  if (!isValid) {
+    showToast("Please correct the highlighted validation errors.", "error");
+    return;
+  }
+
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = `
+      <span class="pulse-dot" style="width:10px; height:10px; margin-right:6px; display:inline-block;"></span>
+      Saving in MySQL...
+    `;
+  }
+
+  try {
+    const response = await fetch("/api/prescriptions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        patientId: patientId,
+        doctorId: doctorId,
+        prescriptionDate: prescriptionDate,
+        items: items
+      })
+    });
+
+    const result = await response.json();
+    if (!response.ok || !result.success) {
+      throw new Error(result.error || `HTTP ${response.status}: Failed to create prescription`);
+    }
+
+    closeModal("modal-create-prescription");
+    if (form) form.reset();
+    showToast(`Prescription ${result.data.rxNumber} issued successfully in MySQL!`, "success");
+
+    // Refresh live prescriptions
+    await fetchLivePrescriptions();
+
+    // View created prescription details
+    showPrescriptionDetails(result.data.id);
+
+  } catch (err) {
+    console.error("Prescription save error:", err);
+    showToast(err.message || "Failed to issue prescription in MySQL.", "error");
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = originalBtnText;
+    }
+  }
+}
+
+// View Prescription Details Modal (Connected to live MySQL GET /api/prescriptions/:id)
+async function showPrescriptionDetails(rxId) {
+  try {
+    const res = await fetch(`/api/prescriptions/${rxId}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to fetch prescription details`);
+    const json = await res.json();
+    if (!json.success || !json.data) throw new Error(json.error || "Prescription not found");
+
+    const rx = json.data;
+    const modalBody = document.getElementById("view-rx-modal-body");
+    if (!modalBody) return;
+
+    modalBody.innerHTML = `
+      <div style="background:#ffffff; border:1px solid var(--border); border-radius:var(--radius-md); padding:20px; font-family:var(--font-sans);">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2px solid var(--border); padding-bottom:14px; margin-bottom:14px;">
+          <div>
+            <div style="font-size:1.15rem; font-weight:800; color:var(--primary); letter-spacing:-0.02em;">PHARMACARE CLINICAL DISPENSARY</div>
+            <div style="font-size:0.75rem; color:var(--text-muted);">Official Medical Prescription & Orders Record</div>
+            <div style="font-size:0.75rem; color:var(--text-muted);">Registry ID #${rx.id} | MySQL Transaction Audit Verified</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-family:var(--font-mono); font-size:1.1rem; font-weight:800; color:var(--text);">${rx.rxNumber}</div>
+            <div style="font-size:0.75rem; color:var(--text-muted); margin-top:2px;">Date: <strong>${rx.date}</strong></div>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:16px; background:#f8fafc; padding:12px 14px; border-radius:var(--radius-sm); font-size:0.83rem; border:1px solid var(--border-light);">
+          <div>
+            <span style="color:var(--text-muted); font-size:0.75rem; text-transform:uppercase; font-weight:700;">Patient Details:</span><br>
+            <strong>${rx.patientName}</strong> (ID: #PAT-${rx.patientId})
+            ${rx.patientPhone ? `<br><span style="color:var(--text-muted); font-size:0.75rem;">Phone: ${rx.patientPhone}</span>` : ''}
+          </div>
+          <div>
+            <span style="color:var(--text-muted); font-size:0.75rem; text-transform:uppercase; font-weight:700;">Prescribing Physician:</span><br>
+            <strong>${rx.doctorName}</strong> (ID: #DOC-${rx.doctorId})<br>
+            <span style="color:var(--primary); font-weight:600; font-size:0.78rem;">${rx.doctorSpecialization || 'General Physician'}</span>
+          </div>
+        </div>
+
+        <div style="font-size:0.78rem; text-transform:uppercase; font-weight:700; color:var(--text-muted); margin-bottom:8px;">
+          Prescribed Medications & Line Items (${rx.items.length})
+        </div>
+
+        <table style="width:100%; border-collapse:collapse; font-size:0.83rem; margin-bottom:16px;">
+          <thead>
+            <tr style="border-bottom:1.5px solid var(--border); text-align:left; color:var(--text-muted); font-size:0.75rem; text-transform:uppercase;">
+              <th style="padding:6px 4px;">#</th>
+              <th style="padding:6px 4px;">Medication</th>
+              <th style="padding:6px 4px;">Manufacturer</th>
+              <th style="padding:6px 4px;">Prescribed Dosage</th>
+              <th style="padding:6px 4px; text-align:center;">Quantity</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rx.items.map((item, idx) => `
+              <tr style="border-bottom:1px solid #f1f5f9;">
+                <td style="padding:8px 4px; color:var(--text-muted);">${idx + 1}</td>
+                <td style="padding:8px 4px;"><strong>${item.medicineName}</strong></td>
+                <td style="padding:8px 4px; color:var(--text-muted); font-size:0.78rem;">${item.manufacturer || '-'}</td>
+                <td style="padding:8px 4px;"><span class="badge-status badge-info" style="font-size:0.78rem;">${item.dosage}</span></td>
+                <td style="padding:8px 4px; text-align:center; font-weight:700;">${item.quantity}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+
+        <div style="border-top:2px solid var(--border); padding-top:10px; display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; color:var(--text-muted);">
+          <div>
+            Note: Prescriptions document medical orders; inventory is deducted only when batches are dispensed at POS.
+          </div>
+          <div style="font-weight:700;">
+            Total Units: ${rx.items.reduce((s, it) => s + (it.quantity || 0), 0)}
+          </div>
+        </div>
+      </div>
+    `;
+
+    openModal("modal-view-prescription");
+  } catch (err) {
+    console.error("Error fetching prescription details:", err);
+    showToast(err.message || "Failed to load prescription details.", "error");
+  }
+}
+
+// Prepare dispense from prescription in POS (navigates without auto-deducting inventory)
+function prepareDispenseFromPrescription(rxId) {
+  const rx = livePrescriptions.find(r => r.id === rxId);
+  switchView('sales');
+  openModal('modal-record-sale');
+  if (rx && rx.patientId) {
+    const pSelect = document.getElementById('sale-patient-select');
+    if (pSelect) pSelect.value = rx.patientId;
+    showToast(`Prescription ${rx.rxNumber} loaded for patient ${rx.patientName}. Select available batch to dispense.`, "info");
+  }
 }
 
 // Quick prepare sale modal from batch

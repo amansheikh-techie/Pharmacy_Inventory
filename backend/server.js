@@ -34,10 +34,16 @@ const medicineRoutes = require('./routes/medicineRoutes');
 const batchRoutes = require('./routes/batchRoutes');
 const reportRoutes = require('./routes/reportRoutes');
 const salesRoutes = require('./routes/salesRoutes');
+const patientRoutes = require('./routes/patientRoutes');
+const doctorRoutes = require('./routes/doctorRoutes');
+const prescriptionRoutes = require('./routes/prescriptionRoutes');
 app.use('/api/medicines', medicineRoutes);
 app.use('/api/batches', batchRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/sales', salesRoutes);
+app.use('/api/patients', patientRoutes);
+app.use('/api/doctors', doctorRoutes);
+app.use('/api/prescriptions', prescriptionRoutes);
 
 // =====================================================================
 // API Health-Check Endpoint (GET /api/health)

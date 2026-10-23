@@ -120,13 +120,13 @@
       <!-- Content Area -->
       <main class="content-area">
 
-        <!-- Phase 4C: Live Database Connected Banner -->
+        <!-- Phase 4D: Live Database Connected Banner -->
         <div class="demo-mode-banner">
           <div style="display:flex; align-items:center; gap:8px;">
-            <span class="demo-mode-badge" style="background:var(--primary);">Phase 4C Active</span>
-            <span><strong>Live MySQL Dispensary Connected:</strong> Medicines, Batches, Stored Procedures, and Sales transactions run live on <code>pharmacy_db</code> with trigger-enforced stock deductions.</span>
+            <span class="demo-mode-badge" style="background:var(--primary);">Phase 4D Active</span>
+            <span><strong>Live MySQL Dispensary Connected:</strong> Medicines, Batches, Stored Procedures, Sales, and Doctor Prescriptions run live on <code>pharmacy_db</code> with transactional integrity.</span>
           </div>
-          <button class="btn btn-outline btn-sm" onclick="fetchLiveSales(); fetchLiveBatches(); fetchLiveMedicines(); fetchLiveReports();" style="background:#ffffff; border-color:#a7f3d0; font-size:0.75rem;">
+          <button class="btn btn-outline btn-sm" onclick="fetchLiveSales(); fetchLiveBatches(); fetchLiveMedicines(); fetchLiveReports(); fetchLivePrescriptions();" style="background:#ffffff; border-color:#a7f3d0; font-size:0.75rem;">
             🔄 Refresh All Live Data
           </button>
         </div>
@@ -443,19 +443,21 @@
               <h2>Doctor Prescriptions Queue</h2>
               <p>Manage medical prescriptions issued by physicians for registered patients</p>
             </div>
+            <button class="btn btn-primary" onclick="openNewPrescriptionModal()">
+              <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              + Issue New Prescription
+            </button>
           </div>
 
-          <!-- Phase 2B: Prescription Search & Status Filter -->
+          <!-- Phase 4D: Prescription Search Toolbar -->
           <div class="content-card" style="margin-bottom: 20px;">
             <div class="table-toolbar">
               <div class="toolbar-filters">
-                <input type="text" id="rx-search-input" class="filter-input" placeholder="Search patient, doctor, diagnosis..." style="width:260px;">
-                <select id="rx-status-filter" class="filter-input">
-                  <option value="">All Prescriptions</option>
-                  <option value="Active">Active / Pending Dispense</option>
-                  <option value="Fulfilled">Fulfilled</option>
-                </select>
+                <input type="text" id="rx-search-input" class="filter-input" placeholder="Search patient, doctor, Rx #..." style="width:280px;">
                 <button class="btn btn-outline btn-sm" id="btn-clear-rx-filters">Clear</button>
+              </div>
+              <div style="font-size:0.8rem; color:var(--text-muted);" id="rx-count-display">
+                Showing 0 prescriptions
               </div>
             </div>
           </div>
@@ -850,6 +852,92 @@
         <button type="button" class="btn btn-outline btn-modal-cancel">Close</button>
         <button type="button" class="btn btn-primary" onclick="window.print()">
           🖨️ Print Receipt
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       MODAL: CREATE PRESCRIPTION (Phase 4D)
+       ===================================================================== -->
+  <div class="modal-overlay" id="modal-create-prescription">
+    <div class="modal-box" style="max-width: 650px;">
+      <div class="modal-header">
+        <h3>
+          <svg style="width:20px; height:20px; stroke:var(--primary); fill:none; stroke-width:2;" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+          Issue Medical Prescription
+        </h3>
+        <button class="modal-close-btn">&times;</button>
+      </div>
+
+      <form id="form-create-prescription" novalidate>
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="new-rx-patient">Patient / Customer *</label>
+              <select id="new-rx-patient" required></select>
+              <div class="field-error" id="err-new-rx-patient">Please select a valid patient.</div>
+            </div>
+
+            <div class="form-group">
+              <label for="new-rx-doctor">Prescribing Doctor *</label>
+              <select id="new-rx-doctor" required></select>
+              <div class="field-error" id="err-new-rx-doctor">Please select a prescribing doctor.</div>
+            </div>
+
+            <div class="form-group full-width">
+              <label for="new-rx-date">Prescription Date *</label>
+              <input type="date" id="new-rx-date" required>
+              <div class="field-error" id="err-new-rx-date">Please provide a valid date.</div>
+            </div>
+          </div>
+
+          <!-- Prescribed Medicines Section -->
+          <div style="margin-top: 18px; border-top: 1px solid var(--border); padding-top: 14px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+              <label style="font-weight:700; color:var(--text); font-size:0.88rem; margin:0;">
+                Prescribed Medications & Dosages *
+              </label>
+              <button type="button" class="btn btn-outline btn-sm" onclick="addPrescriptionItemRow()">
+                + Add Medication
+              </button>
+            </div>
+            <div id="rx-items-container" style="display:flex; flex-direction:column; gap:10px;">
+              <!-- Dynamic item rows injected here -->
+            </div>
+            <div class="field-error" id="err-new-rx-items" style="margin-top:6px;">Please add at least one valid medication with dosage and quantity.</div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline btn-modal-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Prescription</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       MODAL: VIEW PRESCRIPTION DETAILS (Phase 4D)
+       ===================================================================== -->
+  <div class="modal-overlay" id="modal-view-prescription">
+    <div class="modal-box" style="max-width: 650px;">
+      <div class="modal-header">
+        <h3>
+          <svg style="width:20px; height:20px; stroke:var(--primary); fill:none; stroke-width:2;" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+          Prescription Details & Items
+        </h3>
+        <button class="modal-close-btn">&times;</button>
+      </div>
+
+      <div class="modal-body" id="view-rx-modal-body">
+        <!-- Injected dynamically via JavaScript from GET /api/prescriptions/:id -->
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline btn-modal-cancel">Close</button>
+        <button type="button" class="btn btn-primary" onclick="window.print()">
+          🖨️ Print Prescription
         </button>
       </div>
     </div>
