@@ -148,14 +148,14 @@
             </div>
           </div>
 
-          <!-- 4 Stat Metric Cards -->
+          <!-- Phase 5A: 6 Live Dashboard Summary Cards from MySQL -->
           <div class="stats-grid">
             
             <div class="stat-card card-primary">
               <div>
                 <div class="stat-header">Total Medicines</div>
                 <div class="stat-value" id="stat-total-medicines">0</div>
-                <div class="stat-sub">Across 6 therapeutic categories</div>
+                <div class="stat-sub">Formulations in catalog</div>
               </div>
               <div class="stat-icon icon-emerald">
                 <svg viewBox="0 0 24 24"><path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"></path><path d="m8.5 8.5 7 7"></path></svg>
@@ -164,9 +164,9 @@
 
             <div class="stat-card card-success">
               <div>
-                <div class="stat-header">Total Stock Units</div>
+                <div class="stat-header">Total Available Stock</div>
                 <div class="stat-value" id="stat-total-stock">0</div>
-                <div class="stat-sub">Units ready for dispensing</div>
+                <div class="stat-sub">Sum of batch quantities</div>
               </div>
               <div class="stat-icon icon-teal">
                 <svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>
@@ -177,7 +177,7 @@
               <div>
                 <div class="stat-header">Low-Stock Batches</div>
                 <div class="stat-value" id="stat-low-stock">0</div>
-                <div class="stat-sub">At or below reorder threshold</div>
+                <div class="stat-sub">Below threshold (&lt;30 units)</div>
               </div>
               <div class="stat-icon icon-amber">
                 <svg viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
@@ -186,12 +186,34 @@
 
             <div class="stat-card card-danger">
               <div>
-                <div class="stat-header">Expiring / Expired</div>
-                <div class="stat-value" id="stat-expiring">0</div>
-                <div class="stat-sub">Batches requiring quarantine/disposal</div>
+                <div class="stat-header">Expired Batches</div>
+                <div class="stat-value" id="stat-expired-batches">0</div>
+                <div class="stat-sub">Quarantined / unsellable</div>
               </div>
               <div class="stat-icon icon-rose">
                 <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              </div>
+            </div>
+
+            <div class="stat-card card-primary">
+              <div>
+                <div class="stat-header">Total Sales Count</div>
+                <div class="stat-value" id="stat-total-sales">0</div>
+                <div class="stat-sub">Completed transactions</div>
+              </div>
+              <div class="stat-icon icon-teal">
+                <svg viewBox="0 0 24 24"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
+              </div>
+            </div>
+
+            <div class="stat-card card-success">
+              <div>
+                <div class="stat-header">Total Sales Revenue</div>
+                <div class="stat-value" id="stat-sales-revenue">₹0.00</div>
+                <div class="stat-sub">Gross revenue settled</div>
+              </div>
+              <div class="stat-icon icon-emerald">
+                <svg viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
               </div>
             </div>
 
@@ -689,6 +711,57 @@
               </div>
             </div>
 
+          </div>
+
+          <!-- Section 3: Dispensary Sales & Revenue Audit Report (Phase 5A) -->
+          <div class="content-card" style="margin-top: 24px;">
+            <div class="card-header">
+              <h3>
+                <svg viewBox="0 0 24 24" fill="none"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
+                Dispensary Sales Summary & Audit Ledger
+              </h3>
+              <button class="btn btn-outline btn-sm" onclick="switchView('sales')">Open Full Sales Ledger</button>
+            </div>
+            <div class="card-body">
+              <!-- 3 Key Metric Summaries -->
+              <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:16px; margin-bottom: 20px;">
+                <div style="background:#f8fafc; border:1px solid var(--border); border-radius:var(--radius-md); padding:14px 18px;">
+                  <div style="font-size:0.75rem; text-transform:uppercase; color:var(--text-muted); font-weight:700;">Total Transactions</div>
+                  <div style="font-size:1.35rem; font-weight:800; color:var(--text-main);" id="report-sales-count">0</div>
+                  <div style="font-size:0.72rem; color:var(--text-muted);">Audited in MySQL</div>
+                </div>
+                <div style="background:#f8fafc; border:1px solid var(--border); border-radius:var(--radius-md); padding:14px 18px;">
+                  <div style="font-size:0.75rem; text-transform:uppercase; color:var(--text-muted); font-weight:700;">Total Gross Sales</div>
+                  <div style="font-size:1.35rem; font-weight:800; color:var(--primary);" id="report-sales-gross">₹0.00</div>
+                  <div style="font-size:0.72rem; color:var(--text-muted);">Billed & Stock Deducted</div>
+                </div>
+                <div style="background:#f8fafc; border:1px solid var(--border); border-radius:var(--radius-md); padding:14px 18px;">
+                  <div style="font-size:0.75rem; text-transform:uppercase; color:var(--text-muted); font-weight:700;">Average Order Value</div>
+                  <div style="font-size:1.35rem; font-weight:800; color:var(--success);" id="report-sales-aov">₹0.00</div>
+                  <div style="font-size:0.72rem; color:var(--text-muted);">Per Customer Sale</div>
+                </div>
+              </div>
+
+              <!-- Recent Sales Table -->
+              <div class="table-responsive">
+                <table class="clinical-table">
+                  <thead>
+                    <tr>
+                      <th>Invoice #</th>
+                      <th>Sale Date</th>
+                      <th>Customer / Patient</th>
+                      <th>Items Dispensed</th>
+                      <th>Total Amount (₹)</th>
+                      <th>Status</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="report-sales-tbody">
+                    <!-- Injected via JavaScript from MySQL GET /api/reports/sales-summary -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
 
         </section>

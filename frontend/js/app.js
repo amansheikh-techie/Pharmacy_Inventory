@@ -164,6 +164,8 @@ document.addEventListener("DOMContentLoaded", () => {
   initSearchAndFilters();
   initModalsAndForms();
   refreshAllViews();
+  fetchDashboardSummary(); // Phase 5A: Fetch real dashboard counts from MySQL
+  fetchSalesSummaryReport(); // Phase 5A: Fetch real sales audit summary from MySQL
   fetchLiveCategories(); // Phase 3D: Fetch real categories from MySQL
   fetchLiveMedicines(); // Phase 3C: Fetch real medicines from MySQL
   fetchLiveBatches(); // Phase 3D: Fetch real inventory batches from MySQL
@@ -193,13 +195,18 @@ function initNavigation() {
       const activeSec = document.getElementById(`view-${targetView}`);
       if (activeSec) activeSec.classList.add("active");
 
-      // Phase 3C, 3D, 4B, 4C & 4D: Refresh live records when navigating tabs
-      if (targetView === "medicines") {
+      // Phase 3C, 3D, 4B, 4C, 4D & 5A: Refresh live records when navigating tabs
+      if (targetView === "dashboard") {
+        fetchDashboardSummary();
+        fetchLiveBatches();
+        fetchLiveSales();
+      } else if (targetView === "medicines") {
         fetchLiveMedicines();
       } else if (targetView === "batches") {
         fetchLiveBatches();
       } else if (targetView === "reports") {
         fetchLiveReports();
+        fetchSalesSummaryReport();
       } else if (targetView === "sales") {
         fetchLiveSales();
         fetchLivePatients();
@@ -350,50 +357,93 @@ function refreshAllViews() {
   populateDropdownOptions();
 }
 
-// Dashboard Statistics (Recalculates from active MockDB state and live MySQL)
+// Dashboard Statistics (Connected to live MySQL GET /api/reports/dashboard-summary)
 function renderDashboardStats() {
-  const totalMeds = liveMedicines.length > 0 ? liveMedicines.length : MockDB.medicines.length;
-  const activeBatches = liveBatches.length > 0 ? liveBatches : MockDB.batches;
-  
-  const totalStock = activeBatches.reduce((sum, b) => sum + (parseInt(b.stock, 10) || 0), 0);
-  const lowStockBatches = activeBatches.filter(b => {
-    const stock = parseInt(b.stock, 10) || 0;
-    const reorder = parseInt(b.reorderLevel, 10) || 30;
-    const days = b.daysToExpiry !== undefined ? b.daysToExpiry : getDaysUntil(b.expiryDate);
-    return stock <= reorder && days >= 0;
-  });
-  const expiringBatches = activeBatches.filter(b => {
-    const days = b.daysToExpiry !== undefined ? b.daysToExpiry : getDaysUntil(b.expiryDate);
-    return days <= 30;
-  });
-
   const elMeds = document.getElementById("stat-total-medicines");
   const elStock = document.getElementById("stat-total-stock");
   const elLow = document.getElementById("stat-low-stock");
-  const elExp = document.getElementById("stat-expiring");
-
-  if (elMeds) elMeds.textContent = totalMeds;
-  if (elStock) elStock.textContent = totalStock.toLocaleString();
-  if (elLow) elLow.textContent = lowStockBatches.length;
-  if (elExp) elExp.textContent = expiringBatches.length;
-
-  // Sidebar badge for critical alerts
+  const elExpired = document.getElementById("stat-expired-batches");
+  const elSales = document.getElementById("stat-total-sales");
+  const elRev = document.getElementById("stat-sales-revenue");
   const sidebarAlertBadge = document.getElementById("sidebar-alert-badge");
-  if (sidebarAlertBadge) {
-    const totalAlerts = lowStockBatches.length + expiringBatches.length;
-    sidebarAlertBadge.textContent = totalAlerts;
-    sidebarAlertBadge.style.display = totalAlerts > 0 ? "inline-block" : "none";
+
+  // State 1: Loading
+  if (isDashboardLoading) {
+    const loadingBadge = '<span style="opacity:0.5; font-size:1.1rem;">⏳</span>';
+    if (elMeds) elMeds.innerHTML = loadingBadge;
+    if (elStock) elStock.innerHTML = loadingBadge;
+    if (elLow) elLow.innerHTML = loadingBadge;
+    if (elExpired) elExpired.innerHTML = loadingBadge;
+    if (elSales) elSales.innerHTML = loadingBadge;
+    if (elRev) elRev.innerHTML = loadingBadge;
+    return;
   }
+
+  // State 2: Error (never display fake figures if API fails)
+  if (dashboardApiError) {
+    const errorBadge = `<span style="color:var(--danger); font-size:0.95rem; cursor:pointer;" title="${dashboardApiError}" onclick="fetchDashboardSummary()">⚠️ Error</span>`;
+    if (elMeds) elMeds.innerHTML = errorBadge;
+    if (elStock) elStock.innerHTML = errorBadge;
+    if (elLow) elLow.innerHTML = errorBadge;
+    if (elExpired) elExpired.innerHTML = errorBadge;
+    if (elSales) elSales.innerHTML = errorBadge;
+    if (elRev) elRev.innerHTML = errorBadge;
+    if (sidebarAlertBadge) {
+      sidebarAlertBadge.textContent = "!";
+      sidebarAlertBadge.style.display = "inline-block";
+    }
+    return;
+  }
+
+  // State 3: Live MySQL Data from GET /api/reports/dashboard-summary
+  if (liveDashboardSummary) {
+    const summary = liveDashboardSummary;
+    if (elMeds) elMeds.textContent = (summary.totalMedicines || 0).toLocaleString();
+    if (elStock) elStock.textContent = `${(summary.totalStock || 0).toLocaleString()}`;
+    if (elLow) elLow.textContent = (summary.lowStockBatches || 0).toLocaleString();
+    if (elExpired) elExpired.textContent = (summary.expiredBatches || 0).toLocaleString();
+    if (elSales) elSales.textContent = (summary.totalSales || 0).toLocaleString();
+    if (elRev) elRev.textContent = `₹${parseFloat(summary.totalSalesAmount || 0).toFixed(2)}`;
+
+    // Sidebar badge reflects low-stock + expired batches
+    if (sidebarAlertBadge) {
+      const totalAlerts = (summary.lowStockBatches || 0) + (summary.expiredBatches || 0);
+      sidebarAlertBadge.textContent = totalAlerts;
+      sidebarAlertBadge.style.display = totalAlerts > 0 ? "inline-block" : "none";
+    }
+    return;
+  }
+
+  // State 4: Default placeholder before first fetch
+  if (elMeds) elMeds.textContent = "--";
+  if (elStock) elStock.textContent = "--";
+  if (elLow) elLow.textContent = "--";
+  if (elExpired) elExpired.textContent = "--";
+  if (elSales) elSales.textContent = "--";
+  if (elRev) elRev.textContent = "₹0.00";
 }
 
-// Dashboard Critical Alerts Table
+// Dashboard Critical Alerts Table (Evaluates live MySQL batches)
 function renderCriticalAlerts() {
   const container = document.getElementById("dashboard-alerts-tbody");
   if (!container) return;
 
-  const urgentBatches = MockDB.batches.filter(b => {
-    const days = getDaysUntil(b.expiryDate);
-    return days <= 30 || b.stock <= b.reorderLevel;
+  if (isBatchesLoading && liveBatches.length === 0) {
+    container.innerHTML = `<tr><td colspan="5" class="empty-table-state"><div class="empty-table-sub">Checking batch expiry in MySQL...</div></td></tr>`;
+    return;
+  }
+
+  if (batchesApiError && liveBatches.length === 0) {
+    container.innerHTML = `<tr><td colspan="5" class="empty-table-state" style="color:var(--danger);"><div class="empty-table-title" style="color:var(--danger);">Error Checking Batches</div><div class="empty-table-sub">${batchesApiError}</div></td></tr>`;
+    return;
+  }
+
+  const batches = liveBatches.length > 0 ? liveBatches : MockDB.batches;
+  const urgentBatches = batches.filter(b => {
+    const days = b.daysToExpiry !== undefined ? b.daysToExpiry : getDaysUntil(b.expiryDate);
+    const stock = parseInt(b.stock, 10) || 0;
+    const reorder = parseInt(b.reorderLevel, 10) || 30;
+    return days <= 30 || stock <= reorder;
   });
 
   if (urgentBatches.length === 0) {
@@ -402,7 +452,7 @@ function renderCriticalAlerts() {
   }
 
   container.innerHTML = urgentBatches.map(b => {
-    const med = MockDB.medicines.find(m => m.id === b.medicineId) || { name: "Unknown" };
+    const medName = b.medicineName || (MockDB.medicines.find(m => m.id === b.medicineId)?.name) || "Unknown Medicine";
     const status = getBatchStatus(b);
     let badgeClass = "badge-in-stock";
     if (status.type === "expired") badgeClass = "badge-expired";
@@ -411,7 +461,7 @@ function renderCriticalAlerts() {
 
     return `
       <tr>
-        <td><strong>${med.name}</strong></td>
+        <td><strong>${medName}</strong></td>
         <td><span class="font-mono">${b.batchNumber}</span></td>
         <td>${b.stock} units</td>
         <td>${b.expiryDate}</td>
@@ -425,6 +475,16 @@ function renderCriticalAlerts() {
 function renderRecentSales() {
   const container = document.getElementById("dashboard-sales-tbody");
   if (!container) return;
+
+  if (isSalesLoading && liveSales.length === 0) {
+    container.innerHTML = `<tr><td colspan="5" class="empty-table-state"><div class="empty-table-sub">Loading sales transactions from MySQL...</div></td></tr>`;
+    return;
+  }
+
+  if (salesApiError && liveSales.length === 0) {
+    container.innerHTML = `<tr><td colspan="5" class="empty-table-state" style="color:var(--danger);"><div class="empty-table-title" style="color:var(--danger);">Error Loading Sales</div><div class="empty-table-sub">${salesApiError}</div></td></tr>`;
+    return;
+  }
 
   const sales = (liveSales.length > 0) ? liveSales : MockDB.sales;
 
@@ -446,47 +506,58 @@ function renderRecentSales() {
   }).join("");
 }
 
-// Dashboard Low Stock List with Progress Bars
+// Dashboard Low Stock List with Progress Bars (Connected to live MySQL batches)
 function renderLowStockAlertList() {
   const container = document.getElementById("dashboard-lowstock-list");
   if (!container) return;
 
-  const lowStock = MockDB.batches.filter(b => b.stock <= b.reorderLevel);
+  if (isBatchesLoading && liveBatches.length === 0) {
+    container.innerHTML = `<div class="empty-table-state"><div class="empty-table-sub">Analyzing stock thresholds...</div></div>`;
+    return;
+  }
+
+  const batches = liveBatches.length > 0 ? liveBatches : MockDB.batches;
+  const lowStock = batches.filter(b => {
+    const stock = parseInt(b.stock, 10) || 0;
+    const reorder = parseInt(b.reorderLevel, 10) || 30;
+    return stock < reorder;
+  });
 
   if (lowStock.length === 0) {
-    container.innerHTML = `<div class="empty-table-state"><div class="empty-table-title">Stock Levels Safe</div><div class="empty-table-sub">No medicine batches are currently below their reorder threshold.</div></div>`;
+    container.innerHTML = `<div class="empty-table-state"><div class="empty-table-title">Stock Levels Safe</div><div class="empty-table-sub">No medicine batches are currently below the reorder threshold (&lt; 30 units).</div></div>`;
     return;
   }
 
   container.innerHTML = lowStock.map(b => {
-    const med = MockDB.medicines.find(m => m.id === b.medicineId);
-    const maxReference = Math.max(b.reorderLevel * 2, 1);
+    const medName = b.medicineName || (MockDB.medicines.find(m => m.id === b.medicineId)?.name) || "Unknown Medicine";
+    const reorderLevel = parseInt(b.reorderLevel, 10) || 30;
+    const maxReference = Math.max(reorderLevel * 2, 1);
     const pct = Math.min(100, Math.round((b.stock / maxReference) * 100));
     const fillClass = b.stock === 0 ? "fill-danger" : "fill-warning";
 
     return `
       <div class="alert-item">
         <div class="alert-item-info">
-          <div class="alert-item-title">${med ? med.name : 'Unknown Medicine'}</div>
-          <div class="alert-item-sub">Batch: <span class="font-mono">${b.batchNumber}</span> | Reorder Level: ${b.reorderLevel} units</div>
+          <div class="alert-item-title">${medName}</div>
+          <div class="alert-item-sub">Batch: <span class="font-mono">${b.batchNumber}</span> | Reorder Level: ${reorderLevel} units</div>
           <div class="stock-meter">
             <div class="meter-track">
               <div class="meter-fill ${fillClass}" style="width: ${pct}%"></div>
             </div>
             <div class="meter-caption">
-              <span>Stock: <strong>${b.stock}</strong></span>
+              <span>Stock: <strong>${b.stock} units</strong></span>
               <span>${pct}% safe</span>
             </div>
           </div>
         </div>
-        <button class="btn btn-outline btn-sm" onclick="quickRestockBatch(${b.id})">Restock +50</button>
+        <button class="btn btn-outline btn-sm" onclick="switchView('batches')">View Batches</button>
       </div>
     `;
   }).join("");
 }
 
 // =====================================================================
-// Phase 3C, 3D, 4B, 4C & 4D: Live MySQL State & Fetchers
+// Phase 3C, 3D, 4B, 4C, 4D & 5A: Live MySQL State & Fetchers
 // =====================================================================
 let liveMedicines = [];
 let liveCategories = [];
@@ -496,6 +567,15 @@ let liveSales = [];
 let livePatients = [];
 let liveDoctors = [];
 let livePrescriptions = [];
+
+// Phase 5A Live Reports & Dashboard State
+let liveDashboardSummary = null;
+let isDashboardLoading = false;
+let dashboardApiError = null;
+let liveSalesSummary = null;
+let isSalesSummaryLoading = false;
+let salesSummaryApiError = null;
+
 let isMedicinesLoading = false;
 let medicinesApiError = null;
 let isBatchesLoading = false;
@@ -632,6 +712,54 @@ async function fetchLiveReports() {
     console.error('Reports API Error:', err);
     isReportsLoading = false;
     reportsApiError = err.message || 'Database / Stored Procedure Error';
+    renderReportsView();
+  }
+}
+
+// Phase 5A: Fetch live Dashboard Summary from MySQL
+async function fetchDashboardSummary() {
+  isDashboardLoading = true;
+  dashboardApiError = null;
+  renderDashboardStats();
+
+  try {
+    const res = await fetch('/api/reports/dashboard-summary');
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: Failed to reach Dashboard Summary API`);
+    }
+    const json = await res.json();
+    liveDashboardSummary = json.data;
+    isDashboardLoading = false;
+    renderDashboardStats();
+  } catch (err) {
+    console.error('Phase 5A Dashboard Summary API Error:', err);
+    isDashboardLoading = false;
+    dashboardApiError = err.message || 'Database Connection Error';
+    liveDashboardSummary = null;
+    renderDashboardStats();
+  }
+}
+
+// Phase 5A: Fetch live Sales Summary Report from MySQL
+async function fetchSalesSummaryReport() {
+  isSalesSummaryLoading = true;
+  salesSummaryApiError = null;
+  renderReportsView();
+
+  try {
+    const res = await fetch('/api/reports/sales-summary');
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: Failed to reach Sales Summary API`);
+    }
+    const json = await res.json();
+    liveSalesSummary = json;
+    isSalesSummaryLoading = false;
+    renderReportsView();
+  } catch (err) {
+    console.error('Phase 5A Sales Summary Report API Error:', err);
+    isSalesSummaryLoading = false;
+    salesSummaryApiError = err.message || 'Database Connection Error';
+    liveSalesSummary = null;
     renderReportsView();
   }
 }
@@ -1550,6 +1678,84 @@ function renderReportsView() {
       }).join("");
     }
   }
+
+  // Section 3 Output: Sales Summary & Recent Sales Audit Ledger (Phase 5A)
+  const salesCountEl = document.getElementById("report-sales-count");
+  const salesGrossEl = document.getElementById("report-sales-gross");
+  const salesAovEl = document.getElementById("report-sales-aov");
+  const salesTable = document.getElementById("report-sales-tbody");
+
+  if (isSalesSummaryLoading) {
+    if (salesCountEl) salesCountEl.innerHTML = `<span style="opacity:0.6;">⏳</span>`;
+    if (salesGrossEl) salesGrossEl.innerHTML = `<span style="opacity:0.6;">⏳</span>`;
+    if (salesAovEl) salesAovEl.innerHTML = `<span style="opacity:0.6;">⏳</span>`;
+    if (salesTable) {
+      salesTable.innerHTML = `
+        <tr>
+          <td colspan="7" class="empty-table-state">
+            <div class="empty-table-sub">Auditing sales transactions in MySQL...</div>
+          </td>
+        </tr>
+      `;
+    }
+  } else if (salesSummaryApiError) {
+    if (salesCountEl) salesCountEl.textContent = "Error";
+    if (salesGrossEl) salesGrossEl.textContent = "Error";
+    if (salesAovEl) salesAovEl.textContent = "Error";
+    if (salesTable) {
+      salesTable.innerHTML = `
+        <tr>
+          <td colspan="7" class="empty-table-state">
+            <svg viewBox="0 0 24 24" fill="none" style="stroke:var(--danger);"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            <div class="empty-table-title" style="color:var(--danger);">Failed to Load Sales Report</div>
+            <div class="empty-table-sub">${salesSummaryApiError}</div>
+            <button class="btn btn-primary btn-sm" onclick="fetchSalesSummaryReport()" style="margin-top:14px;">
+              🔄 Retry Sales Audit
+            </button>
+          </td>
+        </tr>
+      `;
+    }
+  } else if (liveSalesSummary) {
+    const summary = liveSalesSummary.summary || {};
+    const recent = liveSalesSummary.recentSales || [];
+
+    if (salesCountEl) salesCountEl.textContent = (summary.totalSales || 0).toLocaleString();
+    if (salesGrossEl) salesGrossEl.textContent = `₹${parseFloat(summary.totalGrossSales || 0).toFixed(2)}`;
+    if (salesAovEl) salesAovEl.textContent = `₹${parseFloat(summary.averageSaleValue || 0).toFixed(2)}`;
+
+    if (salesTable) {
+      if (recent.length === 0) {
+        salesTable.innerHTML = `
+          <tr>
+            <td colspan="7" class="empty-table-state">
+              <svg viewBox="0 0 24 24" fill="none" style="stroke:var(--text-muted);"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
+              <div class="empty-table-title">No Dispensary Sales Recorded Yet</div>
+              <div class="empty-table-sub">Sales transactions recorded via the POS will appear in this audited ledger.</div>
+            </td>
+          </tr>
+        `;
+      } else {
+        salesTable.innerHTML = recent.map(s => {
+          return `
+            <tr>
+              <td><span class="font-mono font-bold">${s.invoiceNumber}</span></td>
+              <td>${s.date}</td>
+              <td><strong>${s.patientName || 'Walk-in Customer'}</strong></td>
+              <td>${s.itemCount || 1} line item(s) (${s.totalUnits || s.itemCount || 1} units)</td>
+              <td><strong style="color:var(--primary); font-size:1.05rem;">₹${parseFloat(s.totalAmount).toFixed(2)}</strong></td>
+              <td><span class="badge-status badge-in-stock">Billed & Paid</span></td>
+              <td>
+                <button class="btn btn-outline btn-sm" onclick="showInvoiceDetails(${s.id})" style="font-size:0.75rem; padding:4px 8px;">
+                  View Invoice
+                </button>
+              </td>
+            </tr>
+          `;
+        }).join("");
+      }
+    }
+  }
 }
 
 // =====================================================================
@@ -2150,6 +2356,8 @@ async function saveNewBatch() {
     await fetchLiveBatches();
     await fetchLiveMedicines();
     await fetchLiveReports();
+    await fetchDashboardSummary();
+    await fetchSalesSummaryReport();
     refreshAllViews();
   } catch (err) {
     console.error("Error creating batch in MySQL:", err);
@@ -2257,6 +2465,8 @@ async function saveEditedBatch() {
     await fetchLiveBatches();
     await fetchLiveMedicines();
     await fetchLiveReports();
+    await fetchDashboardSummary();
+    await fetchSalesSummaryReport();
     refreshAllViews();
   } catch (err) {
     console.error("Error updating batch in MySQL:", err);
@@ -2355,6 +2565,8 @@ async function executeSaleTransaction() {
     await fetchLiveBatches();
     await fetchLiveMedicines();
     await fetchLiveReports();
+    await fetchDashboardSummary();
+    await fetchSalesSummaryReport();
     refreshAllViews();
 
     // Show full invoice receipt from MySQL
