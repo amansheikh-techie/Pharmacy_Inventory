@@ -120,13 +120,13 @@
       <!-- Content Area -->
       <main class="content-area">
 
-        <!-- Phase 4D: Live Database Connected Banner -->
+        <!-- Phase 4E: Live Database Connected Banner -->
         <div class="demo-mode-banner">
           <div style="display:flex; align-items:center; gap:8px;">
-            <span class="demo-mode-badge" style="background:var(--primary);">Phase 4D Active</span>
-            <span><strong>Live MySQL Dispensary Connected:</strong> Medicines, Batches, Stored Procedures, Sales, and Doctor Prescriptions run live on <code>pharmacy_db</code> with transactional integrity.</span>
+            <span class="demo-mode-badge" style="background:var(--primary);">Phase 4E Active</span>
+            <span><strong>Live MySQL Dispensary Connected:</strong> Medicines, Batches, Stored Procedures, Sales, Prescriptions, Patients, and Doctors run live on <code>pharmacy_db</code>.</span>
           </div>
-          <button class="btn btn-outline btn-sm" onclick="fetchLiveSales(); fetchLiveBatches(); fetchLiveMedicines(); fetchLiveReports(); fetchLivePrescriptions();" style="background:#ffffff; border-color:#a7f3d0; font-size:0.75rem;">
+          <button class="btn btn-outline btn-sm" onclick="fetchLiveSales(); fetchLiveBatches(); fetchLiveMedicines(); fetchLiveReports(); fetchLivePrescriptions(); fetchLivePatients(); fetchLiveDoctors();" style="background:#ffffff; border-color:#a7f3d0; font-size:0.75rem;">
             🔄 Refresh All Live Data
           </button>
         </div>
@@ -520,31 +520,45 @@
         </section>
 
         <!-- =================================================================
-             VIEW 6: PATIENTS
+             VIEW 6: PATIENTS (Phase 4E)
              ================================================================= -->
         <section id="view-patients" class="view-section">
           <div class="page-header">
             <div class="page-title">
               <h2>Patient Registry</h2>
-              <p>Registered dispensary customers and medical profiles</p>
+              <p>Registered dispensary customers and medical profiles stored in MySQL</p>
             </div>
+            <button class="btn btn-primary" onclick="openNewPatientModal()">
+              <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              + Register New Patient
+            </button>
           </div>
 
           <div class="content-card">
+            <div class="table-toolbar">
+              <div class="toolbar-filters">
+                <input type="text" id="patient-search-input" class="filter-input" placeholder="Search by patient name or phone..." style="width:280px;">
+                <button class="btn btn-outline btn-sm" id="btn-clear-patient-filters">Clear</button>
+              </div>
+              <div style="font-size:0.8rem; color:var(--text-muted);" id="patient-count-display">
+                Showing 0 patients
+              </div>
+            </div>
+
             <div class="card-body">
               <div class="table-responsive">
                 <table class="clinical-table">
                   <thead>
                     <tr>
                       <th>Patient ID</th>
-                      <th>Full Name</th>
+                      <th>Patient Full Name</th>
                       <th>Contact Phone</th>
-                      <th>Demographics</th>
-                      <th>Medical History Notes</th>
+                      <th>Status</th>
+                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody id="patients-table-tbody">
-                    <!-- Injected via JavaScript -->
+                    <!-- Injected via JavaScript from MySQL GET /api/patients -->
                   </tbody>
                 </table>
               </div>
@@ -553,17 +567,31 @@
         </section>
 
         <!-- =================================================================
-             VIEW 7: DOCTORS
+             VIEW 7: DOCTORS (Phase 4E)
              ================================================================= -->
         <section id="view-doctors" class="view-section">
           <div class="page-header">
             <div class="page-title">
               <h2>Registered Medical Practitioners</h2>
-              <p>Licensed physicians authorized to issue medication prescriptions</p>
+              <p>Licensed physicians authorized to issue clinical prescriptions in MySQL</p>
             </div>
+            <button class="btn btn-primary" onclick="openNewDoctorModal()">
+              <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              + Register New Doctor
+            </button>
           </div>
 
           <div class="content-card">
+            <div class="table-toolbar">
+              <div class="toolbar-filters">
+                <input type="text" id="doctor-search-input" class="filter-input" placeholder="Search by physician name or specialization..." style="width:300px;">
+                <button class="btn btn-outline btn-sm" id="btn-clear-doctor-filters">Clear</button>
+              </div>
+              <div style="font-size:0.8rem; color:var(--text-muted);" id="doctor-count-display">
+                Showing 0 doctors
+              </div>
+            </div>
+
             <div class="card-body">
               <div class="table-responsive">
                 <table class="clinical-table">
@@ -571,13 +599,13 @@
                     <tr>
                       <th>Doctor ID</th>
                       <th>Physician Name</th>
-                      <th>Specialization</th>
-                      <th>License #</th>
-                      <th>Phone</th>
+                      <th>Clinical Specialization</th>
+                      <th>Status</th>
+                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody id="doctors-table-tbody">
-                    <!-- Injected via JavaScript -->
+                    <!-- Injected via JavaScript from MySQL GET /api/doctors -->
                   </tbody>
                 </table>
               </div>
@@ -1158,6 +1186,78 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-outline btn-modal-cancel">Cancel</button>
           <button type="submit" class="btn btn-primary" id="btn-save-new-batch">Save Batch to MySQL</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       MODAL: REGISTER / EDIT PATIENT (Phase 4E)
+       ===================================================================== -->
+  <div class="modal-overlay" id="modal-patient">
+    <div class="modal-box" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3 id="modal-patient-title">
+          <svg style="width:20px; height:20px; stroke:var(--primary); fill:none; stroke-width:2;" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
+          Register New Patient
+        </h3>
+        <button class="modal-close-btn">&times;</button>
+      </div>
+      <form id="form-patient" novalidate>
+        <input type="hidden" id="patient-id-input">
+        <div class="modal-body">
+          <div class="form-grid single-col">
+            <div class="form-group">
+              <label for="patient-name-input">Patient Full Name *</label>
+              <input type="text" id="patient-name-input" placeholder="e.g. Ramesh Chandra" required>
+              <div class="field-error" id="err-patient-name">Patient name is required (between 2 and 100 characters).</div>
+            </div>
+            <div class="form-group">
+              <label for="patient-phone-input">Contact Phone (Max 15 digits)</label>
+              <input type="tel" id="patient-phone-input" placeholder="e.g. 9876543210" maxlength="15">
+              <div class="field-error" id="err-patient-phone">Phone number cannot exceed 15 digits.</div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline btn-modal-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-save-patient">Save Patient</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- =====================================================================
+       MODAL: REGISTER / EDIT DOCTOR (Phase 4E)
+       ===================================================================== -->
+  <div class="modal-overlay" id="modal-doctor">
+    <div class="modal-box" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3 id="modal-doctor-title">
+          <svg style="width:20px; height:20px; stroke:var(--primary); fill:none; stroke-width:2;" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
+          Register Prescribing Doctor
+        </h3>
+        <button class="modal-close-btn">&times;</button>
+      </div>
+      <form id="form-doctor" novalidate>
+        <input type="hidden" id="doctor-id-input">
+        <div class="modal-body">
+          <div class="form-grid single-col">
+            <div class="form-group">
+              <label for="doctor-name-input">Physician Full Name *</label>
+              <input type="text" id="doctor-name-input" placeholder="e.g. Dr. Kavita Sharma" required>
+              <div class="field-error" id="err-doctor-name">Doctor name is required (between 2 and 100 characters).</div>
+            </div>
+            <div class="form-group">
+              <label for="doctor-specialization-input">Clinical Specialization</label>
+              <input type="text" id="doctor-specialization-input" placeholder="e.g. General Physician, Cardiologist, Dermatologist" maxlength="100">
+              <div class="field-error" id="err-doctor-specialization">Specialization cannot exceed 100 characters.</div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline btn-modal-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-save-doctor">Save Doctor</button>
         </div>
       </form>
     </div>

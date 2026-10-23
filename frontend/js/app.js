@@ -207,6 +207,10 @@ function initNavigation() {
         fetchLivePrescriptions();
         fetchLivePatients();
         fetchLiveDoctors();
+      } else if (targetView === "patients") {
+        fetchLivePatients();
+      } else if (targetView === "doctors") {
+        fetchLiveDoctors();
       }
     });
   });
@@ -299,6 +303,30 @@ function initSearchAndFilters() {
     saleClear.addEventListener("click", () => {
       if (saleSearch) saleSearch.value = "";
       renderSalesHistoryTable();
+    });
+  }
+
+  // Patients view search filter
+  const patientSearch = document.getElementById("patient-search-input");
+  const patientClear = document.getElementById("btn-clear-patient-filters");
+
+  if (patientSearch) patientSearch.addEventListener("input", () => renderPatientsTable());
+  if (patientClear) {
+    patientClear.addEventListener("click", () => {
+      if (patientSearch) patientSearch.value = "";
+      renderPatientsTable();
+    });
+  }
+
+  // Doctors view search filter
+  const doctorSearch = document.getElementById("doctor-search-input");
+  const doctorClear = document.getElementById("btn-clear-doctor-filters");
+
+  if (doctorSearch) doctorSearch.addEventListener("input", () => renderDoctorsTable());
+  if (doctorClear) {
+    doctorClear.addEventListener("click", () => {
+      if (doctorSearch) doctorSearch.value = "";
+      renderDoctorsTable();
     });
   }
 }
@@ -478,6 +506,10 @@ let isSalesLoading = false;
 let salesApiError = null;
 let isPrescriptionsLoading = false;
 let prescriptionsApiError = null;
+let isPatientsLoading = false;
+let patientsApiError = null;
+let isDoctorsLoading = false;
+let doctorsApiError = null;
 
 async function fetchLivePrescriptions() {
   isPrescriptionsLoading = true;
@@ -503,15 +535,26 @@ async function fetchLivePrescriptions() {
 }
 
 async function fetchLiveDoctors() {
+  isDoctorsLoading = true;
+  doctorsApiError = null;
+  renderDoctorsTable();
+
   try {
     const res = await fetch('/api/doctors');
-    if (res.ok) {
-      const json = await res.json();
-      liveDoctors = json.data || [];
-      populateDoctorDropdownOptions();
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: Failed to reach Doctors API`);
     }
+    const json = await res.json();
+    liveDoctors = json.data || [];
+    isDoctorsLoading = false;
+    renderDoctorsTable();
+    populateDoctorDropdownOptions();
   } catch (err) {
-    console.warn('Could not fetch doctors from API:', err.message);
+    console.error('Phase 4E Doctors API Error:', err);
+    isDoctorsLoading = false;
+    doctorsApiError = err.message || 'Database Connection Error';
+    liveDoctors = [];
+    renderDoctorsTable();
   }
 }
 
@@ -541,23 +584,26 @@ async function fetchLiveSales() {
 }
 
 async function fetchLivePatients() {
+  isPatientsLoading = true;
+  patientsApiError = null;
+  renderPatientsTable();
+
   try {
     const res = await fetch('/api/patients');
-    if (res.ok) {
-      const json = await res.json();
-      livePatients = json.data || [];
-      populatePatientDropdownOptions();
-    } else {
-      // Fallback
-      const fb = await fetch('/api/sales/patients');
-      if (fb.ok) {
-        const json = await fb.json();
-        livePatients = json.data || [];
-        populatePatientDropdownOptions();
-      }
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}: Failed to reach Patients API`);
     }
+    const json = await res.json();
+    livePatients = json.data || [];
+    isPatientsLoading = false;
+    renderPatientsTable();
+    populatePatientDropdownOptions();
   } catch (err) {
-    console.warn('Could not fetch patients from API:', err.message);
+    console.error('Phase 4E Patients API Error:', err);
+    isPatientsLoading = false;
+    patientsApiError = err.message || 'Database Connection Error';
+    livePatients = [];
+    renderPatientsTable();
   }
 }
 
@@ -1207,34 +1253,170 @@ function renderSalesHistoryTable() {
   }).join("");
 }
 
-// Patients Table
+// Patients Table with Search (Connected to live MySQL /api/patients)
 function renderPatientsTable() {
   const tbody = document.getElementById("patients-table-tbody");
   if (!tbody) return;
 
-  tbody.innerHTML = MockDB.patients.map(p => `
+  const searchInput = document.getElementById("patient-search-input");
+  const countDisplay = document.getElementById("patient-count-display");
+  const query = searchInput ? searchInput.value.toLowerCase().trim() : "";
+
+  // State 1: Loading
+  if (isPatientsLoading) {
+    if (countDisplay) countDisplay.textContent = "Connecting to MySQL...";
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="5" class="empty-table-state">
+          <div class="pulse-dot" style="margin:0 auto 12px; width:16px; height:16px;"></div>
+          <div class="empty-table-title">Loading Patient Registry...</div>
+          <div class="empty-table-sub">Querying registered patient profiles from MySQL <code>pharmacy_db</code></div>
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  // State 2: Error (Never display fake data when API fails)
+  if (patientsApiError) {
+    if (countDisplay) countDisplay.textContent = "Database Error";
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="5" class="empty-table-state">
+          <svg viewBox="0 0 24 24" fill="none" style="stroke:var(--danger);"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+          <div class="empty-table-title" style="color:var(--danger);">Failed to Retrieve Patients</div>
+          <div class="empty-table-sub">${patientsApiError}</div>
+          <button class="btn btn-primary btn-sm" onclick="fetchLivePatients()" style="margin-top:14px;">
+            🔄 Retry Database Query
+          </button>
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  const patientData = livePatients;
+  const filtered = patientData.filter(p => {
+    const name = (p.name || "").toLowerCase();
+    const phone = (p.phone || "").toLowerCase();
+    const id = String(p.id || "");
+    return query === "" || name.includes(query) || phone.includes(query) || id.includes(query);
+  });
+
+  if (countDisplay) {
+    countDisplay.textContent = `Showing ${filtered.length} of ${patientData.length} patients from MySQL`;
+  }
+
+  // State 3: Empty State
+  if (filtered.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="5" class="empty-table-state">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle></svg>
+          <div class="empty-table-title">${query ? 'No matching patients found' : 'No Patients Registered in Database'}</div>
+          <div class="empty-table-sub">${query ? 'Try searching for a different name or phone number.' : 'Click "+ Register New Patient" to add your first patient profile.'}</div>
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  // State 4: Render Live Patients
+  tbody.innerHTML = filtered.map(p => `
     <tr>
-      <td><span class="font-mono">#PAT-${p.id}</span></td>
+      <td><span class="font-mono font-bold">#PAT-${p.id}</span></td>
       <td><strong>${p.name}</strong></td>
-      <td>${p.phone}</td>
-      <td>${p.age} yrs, ${p.gender}</td>
-      <td>${p.history}</td>
+      <td>${p.phone ? `<span class="font-mono">${p.phone}</span>` : '<span style="color:var(--text-muted); font-size:0.8rem;">None recorded</span>'}</td>
+      <td><span class="badge-status badge-in-stock">Registered Patient</span></td>
+      <td>
+        <button class="btn btn-outline btn-sm" onclick="openEditPatientModal(${p.id})">
+          Edit
+        </button>
+      </td>
     </tr>
   `).join("");
 }
 
-// Doctors Table
+// Doctors Table with Search (Connected to live MySQL /api/doctors)
 function renderDoctorsTable() {
   const tbody = document.getElementById("doctors-table-tbody");
   if (!tbody) return;
 
-  tbody.innerHTML = MockDB.doctors.map(d => `
+  const searchInput = document.getElementById("doctor-search-input");
+  const countDisplay = document.getElementById("doctor-count-display");
+  const query = searchInput ? searchInput.value.toLowerCase().trim() : "";
+
+  // State 1: Loading
+  if (isDoctorsLoading) {
+    if (countDisplay) countDisplay.textContent = "Connecting to MySQL...";
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="5" class="empty-table-state">
+          <div class="pulse-dot" style="margin:0 auto 12px; width:16px; height:16px;"></div>
+          <div class="empty-table-title">Loading Doctor Registry...</div>
+          <div class="empty-table-sub">Querying licensed medical practitioners from MySQL <code>pharmacy_db</code></div>
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  // State 2: Error (Never display fake data when API fails)
+  if (doctorsApiError) {
+    if (countDisplay) countDisplay.textContent = "Database Error";
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="5" class="empty-table-state">
+          <svg viewBox="0 0 24 24" fill="none" style="stroke:var(--danger);"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+          <div class="empty-table-title" style="color:var(--danger);">Failed to Retrieve Doctors</div>
+          <div class="empty-table-sub">${doctorsApiError}</div>
+          <button class="btn btn-primary btn-sm" onclick="fetchLiveDoctors()" style="margin-top:14px;">
+            🔄 Retry Database Query
+          </button>
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  const doctorData = liveDoctors;
+  const filtered = doctorData.filter(d => {
+    const name = (d.name || "").toLowerCase();
+    const spec = (d.specialization || "").toLowerCase();
+    const id = String(d.id || "");
+    return query === "" || name.includes(query) || spec.includes(query) || id.includes(query);
+  });
+
+  if (countDisplay) {
+    countDisplay.textContent = `Showing ${filtered.length} of ${doctorData.length} doctors from MySQL`;
+  }
+
+  // State 3: Empty State
+  if (filtered.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="5" class="empty-table-state">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle></svg>
+          <div class="empty-table-title">${query ? 'No matching doctors found' : 'No Doctors Registered in Database'}</div>
+          <div class="empty-table-sub">${query ? 'Try searching for a different name or specialization.' : 'Click "+ Register New Doctor" to add a licensed physician.'}</div>
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  // State 4: Render Live Doctors
+  tbody.innerHTML = filtered.map(d => `
     <tr>
-      <td><span class="font-mono">#DOC-${d.id}</span></td>
+      <td><span class="font-mono font-bold">#DOC-${d.id}</span></td>
       <td><strong>${d.name}</strong></td>
-      <td>${d.specialization}</td>
-      <td><span class="font-mono">${d.license}</span></td>
-      <td>${d.phone}</td>
+      <td><span class="badge-status badge-info">${d.specialization || 'General Physician'}</span></td>
+      <td><span class="badge-status badge-in-stock">Active Physician</span></td>
+      <td>
+        <button class="btn btn-outline btn-sm" onclick="openEditDoctorModal(${d.id})">
+          Edit
+        </button>
+      </td>
     </tr>
   `).join("");
 }
@@ -1447,6 +1629,24 @@ function initModalsAndForms() {
     formCreateRx.addEventListener("submit", (e) => {
       e.preventDefault();
       saveNewPrescription();
+    });
+  }
+
+  // Modal 8: Patient Form (Phase 4E)
+  const formPatient = document.getElementById("form-patient");
+  if (formPatient) {
+    formPatient.addEventListener("submit", (e) => {
+      e.preventDefault();
+      savePatient();
+    });
+  }
+
+  // Modal 9: Doctor Form (Phase 4E)
+  const formDoctor = document.getElementById("form-doctor");
+  if (formDoctor) {
+    formDoctor.addEventListener("submit", (e) => {
+      e.preventDefault();
+      saveDoctor();
     });
   }
 
@@ -2565,6 +2765,226 @@ async function showInvoiceDetails(saleId) {
   } catch (err) {
     console.error("Error fetching invoice:", err);
     showToast(err.message || "Failed to load receipt details.", "error");
+  }
+}
+
+// =====================================================================
+// Phase 4E: Patient & Doctor Management Action Handlers
+// =====================================================================
+
+function openNewPatientModal() {
+  const form = document.getElementById("form-patient");
+  if (form) form.reset();
+  const idInput = document.getElementById("patient-id-input");
+  if (idInput) idInput.value = "";
+  const title = document.getElementById("modal-patient-title");
+  if (title) title.innerHTML = `
+    <svg style="width:20px; height:20px; stroke:var(--primary); fill:none; stroke-width:2;" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
+    Register New Patient
+  `;
+  document.querySelectorAll("#modal-patient .field-error").forEach(el => el.classList.remove("active"));
+  openModal("modal-patient");
+}
+
+function openEditPatientModal(patientId) {
+  const patient = livePatients.find(p => p.id === patientId);
+  if (!patient) return;
+
+  const form = document.getElementById("form-patient");
+  if (form) form.reset();
+  document.querySelectorAll("#modal-patient .field-error").forEach(el => el.classList.remove("active"));
+
+  const idInput = document.getElementById("patient-id-input");
+  const nameInput = document.getElementById("patient-name-input");
+  const phoneInput = document.getElementById("patient-phone-input");
+  const title = document.getElementById("modal-patient-title");
+
+  if (idInput) idInput.value = patient.id;
+  if (nameInput) nameInput.value = patient.name;
+  if (phoneInput) phoneInput.value = patient.phone || "";
+  if (title) title.innerHTML = `
+    <svg style="width:20px; height:20px; stroke:var(--primary); fill:none; stroke-width:2;" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+    Edit Patient #PAT-${patient.id}
+  `;
+
+  openModal("modal-patient");
+}
+
+async function savePatient() {
+  const idInput = document.getElementById("patient-id-input");
+  const nameInput = document.getElementById("patient-name-input");
+  const phoneInput = document.getElementById("patient-phone-input");
+  const submitBtn = document.getElementById("btn-save-patient");
+  const originalBtnText = submitBtn ? submitBtn.innerHTML : "Save Patient";
+
+  document.querySelectorAll("#modal-patient .field-error").forEach(el => el.classList.remove("active"));
+
+  const patientId = idInput && idInput.value ? parseInt(idInput.value, 10) : null;
+  const name = nameInput ? nameInput.value.trim() : "";
+  const phone = phoneInput ? phoneInput.value.trim() : "";
+
+  let isValid = true;
+  if (!name || name.length < 2 || name.length > 100) {
+    document.getElementById("err-patient-name")?.classList.add("active");
+    isValid = false;
+  }
+  if (phone && phone.length > 15) {
+    document.getElementById("err-patient-phone")?.classList.add("active");
+    isValid = false;
+  }
+
+  if (!isValid) {
+    showToast("Please correct the validation errors in the form.", "error");
+    return;
+  }
+
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = `
+      <span class="pulse-dot" style="width:10px; height:10px; margin-right:6px; display:inline-block;"></span>
+      Saving in MySQL...
+    `;
+  }
+
+  try {
+    const isEdit = !!patientId;
+    const url = isEdit ? `/api/patients/${patientId}` : `/api/patients`;
+    const method = isEdit ? "PUT" : "POST";
+
+    const response = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, phone })
+    });
+
+    const result = await response.json();
+    if (!response.ok || !result.success) {
+      throw new Error(result.error || `HTTP ${response.status}: Failed to save patient.`);
+    }
+
+    closeModal("modal-patient");
+    showToast(isEdit ? `Patient #${patientId} updated successfully!` : `Patient "${name}" registered successfully!`, "success");
+
+    // Refresh live patients list and update prescription/sale dropdowns
+    await fetchLivePatients();
+    populatePatientDropdownOptions();
+
+  } catch (err) {
+    console.error("Patient save error:", err);
+    showToast(err.message || "Failed to save patient record in MySQL.", "error");
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = originalBtnText;
+    }
+  }
+}
+
+function openNewDoctorModal() {
+  const form = document.getElementById("form-doctor");
+  if (form) form.reset();
+  const idInput = document.getElementById("doctor-id-input");
+  if (idInput) idInput.value = "";
+  const title = document.getElementById("modal-doctor-title");
+  if (title) title.innerHTML = `
+    <svg style="width:20px; height:20px; stroke:var(--primary); fill:none; stroke-width:2;" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
+    Register Prescribing Doctor
+  `;
+  document.querySelectorAll("#modal-doctor .field-error").forEach(el => el.classList.remove("active"));
+  openModal("modal-doctor");
+}
+
+function openEditDoctorModal(doctorId) {
+  const doctor = liveDoctors.find(d => d.id === doctorId);
+  if (!doctor) return;
+
+  const form = document.getElementById("form-doctor");
+  if (form) form.reset();
+  document.querySelectorAll("#modal-doctor .field-error").forEach(el => el.classList.remove("active"));
+
+  const idInput = document.getElementById("doctor-id-input");
+  const nameInput = document.getElementById("doctor-name-input");
+  const specInput = document.getElementById("doctor-specialization-input");
+  const title = document.getElementById("modal-doctor-title");
+
+  if (idInput) idInput.value = doctor.id;
+  if (nameInput) nameInput.value = doctor.name;
+  if (specInput) specInput.value = doctor.specialization || "";
+  if (title) title.innerHTML = `
+    <svg style="width:20px; height:20px; stroke:var(--primary); fill:none; stroke-width:2;" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+    Edit Doctor #DOC-${doctor.id}
+  `;
+
+  openModal("modal-doctor");
+}
+
+async function saveDoctor() {
+  const idInput = document.getElementById("doctor-id-input");
+  const nameInput = document.getElementById("doctor-name-input");
+  const specInput = document.getElementById("doctor-specialization-input");
+  const submitBtn = document.getElementById("btn-save-doctor");
+  const originalBtnText = submitBtn ? submitBtn.innerHTML : "Save Doctor";
+
+  document.querySelectorAll("#modal-doctor .field-error").forEach(el => el.classList.remove("active"));
+
+  const doctorId = idInput && idInput.value ? parseInt(idInput.value, 10) : null;
+  const name = nameInput ? nameInput.value.trim() : "";
+  const specialization = specInput ? specInput.value.trim() : "";
+
+  let isValid = true;
+  if (!name || name.length < 2 || name.length > 100) {
+    document.getElementById("err-doctor-name")?.classList.add("active");
+    isValid = false;
+  }
+  if (specialization && specialization.length > 100) {
+    document.getElementById("err-doctor-specialization")?.classList.add("active");
+    isValid = false;
+  }
+
+  if (!isValid) {
+    showToast("Please correct the validation errors in the form.", "error");
+    return;
+  }
+
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = `
+      <span class="pulse-dot" style="width:10px; height:10px; margin-right:6px; display:inline-block;"></span>
+      Saving in MySQL...
+    `;
+  }
+
+  try {
+    const isEdit = !!doctorId;
+    const url = isEdit ? `/api/doctors/${doctorId}` : `/api/doctors`;
+    const method = isEdit ? "PUT" : "POST";
+
+    const response = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, specialization })
+    });
+
+    const result = await response.json();
+    if (!response.ok || !result.success) {
+      throw new Error(result.error || `HTTP ${response.status}: Failed to save doctor.`);
+    }
+
+    closeModal("modal-doctor");
+    showToast(isEdit ? `Doctor #${doctorId} updated successfully!` : `Doctor "${name}" registered successfully!`, "success");
+
+    // Refresh live doctors list and update prescription dropdown
+    await fetchLiveDoctors();
+    populateDoctorDropdownOptions();
+
+  } catch (err) {
+    console.error("Doctor save error:", err);
+    showToast(err.message || "Failed to save doctor record in MySQL.", "error");
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = originalBtnText;
+    }
   }
 }
 

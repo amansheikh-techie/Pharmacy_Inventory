@@ -379,6 +379,7 @@ router.post('/', async (req, res) => {
       success: true,
       message: 'Prescription recorded successfully in database.',
       data: {
+        id: newPrescriptionId,
         prescriptionId: newPrescriptionId,
         rxNumber: `RX-2026-${String(newPrescriptionId).padStart(4, '0')}`,
         date: savedRx.rxDate,
