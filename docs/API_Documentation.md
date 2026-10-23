@@ -319,15 +319,111 @@ Processes a dispensary sale transaction.
 ### `GET /prescriptions`
 Retrieves doctor prescriptions with patient details and status.
 
-### `PUT /prescriptions/:id/dispense`
-Updates prescription status to `Fulfilled`.
+### `GET /prescriptions/:id`
+Retrieves a single prescription with patient, doctor, and prescribed medicine items.
+
+### `POST /prescriptions`
+Creates a doctor prescription with line items (does not deduct inventory stock).
 
 ---
 
-## 5. Stored Procedures & Audit Reports
+## 5. Patients & Doctors Management
+
+### `GET /patients`
+Retrieves registered patients with optional `?search=` query.
+
+### `POST /patients`
+Registers a new patient (`name`, `phone`, `age`, `gender`, `address`).
+
+### `PUT /patients/:id`
+Updates an existing patient record.
+
+### `GET /doctors`
+Retrieves registered physicians with optional `?search=` query.
+
+### `POST /doctors`
+Registers a new doctor (`name`, `specialization`, `phone`, `license_number`).
+
+### `PUT /doctors/:id`
+Updates an existing doctor profile.
+
+---
+
+## 6. Stored Procedures & Audit Reports (Phase 5A)
+
+### `GET /reports/dashboard-summary`
+Computes non-duplicative scalar aggregates for the clinical dashboard summary cards directly from MySQL tables.
+* **Response (`200 OK`)**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "totalMedicines": 5,
+      "totalStock": 353,
+      "lowStockBatches": 1,
+      "expiredBatches": 0,
+      "nearExpiryBatches": 0,
+      "totalSales": 3,
+      "totalSalesAmount": 215.00,
+      "totalPrescriptions": 3
+    }
+  }
+  ```
+
+### `GET /reports/sales-summary`
+Retrieves aggregated gross sales, average order value (AOV), and recent sales transactions audit ledger with line item counts.
+* **Response (`200 OK`)**:
+  ```json
+  {
+    "success": true,
+    "summary": {
+      "totalSales": 3,
+      "totalGrossSales": 215.00,
+      "averageSaleValue": 71.67
+    },
+    "recentSales": [
+      {
+        "id": 3,
+        "invoiceNumber": "INV-2026-0003",
+        "date": "2026-10-20",
+        "patientName": "Arjun Kumar",
+        "totalAmount": 5.00,
+        "itemCount": 1,
+        "totalUnits": 2
+      }
+    ]
+  }
+  ```
 
 ### `GET /reports/low-stock`
-Calls MySQL stored procedure `CALL GetLowStock()` returning batches where `QuantityInStock <= ReorderLevel`.
+Calls MySQL stored procedure `CALL GetLowStock()` returning batches where `quantity < 30`.
+* **Response (`200 OK`)**:
+  ```json
+  {
+    "success": true,
+    "source": "GetLowStock() Stored Procedure",
+    "threshold": 30,
+    "count": 1,
+    "data": [
+      {
+        "medicineName": "Antiseptic Ointment",
+        "batchNumber": "OIN101",
+        "stock": 25,
+        "reorderLevel": 30,
+        "condition": "Below Reorder Threshold (< 30 units)"
+      }
+    ]
+  }
+  ```
 
 ### `GET /reports/expiry`
-Calls MySQL stored procedure `CALL GetExpiryReport()` returning batches expiring within 60 days or already expired.
+Calls MySQL stored procedure `CALL GetExpiryReport()` returning batches expiring within the 90-day window or already expired.
+* **Response (`200 OK`)**:
+  ```json
+  {
+    "success": true,
+    "source": "GetExpiryReport() Stored Procedure (90-day window)",
+    "count": 0,
+    "data": []
+  }
+  ```

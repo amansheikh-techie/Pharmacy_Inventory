@@ -116,6 +116,25 @@ node server.js
 Open your browser at:
 👉 **`http://localhost:5000`**
 
+### 6. Run Automated Test Suites
+Run the comprehensive automated test suites to verify database integrity, stored procedures, triggers, and APIs:
+```bash
+# Dashboard & Reports Verification (Phase 5A)
+node backend/test_dashboard_reports_api.js
+
+# Medicine Inventory & Batches Verification
+node backend/test_medicine_api.js
+
+# Sales & Billing POS Verification (Triggers & Stock Deductions)
+node backend/test_sales_api.js
+
+# Prescription Management Verification
+node backend/test_prescription_api.js
+
+# Patient & Doctor Management Verification
+node backend/test_patient_doctor_api.js
+```
+
 ---
 
 ## 📚 Project Documentation
