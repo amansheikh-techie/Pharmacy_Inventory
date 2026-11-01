@@ -22,3 +22,4 @@ services:
         value: 3306
       - key: DB_SSL
         value: "true"
+
