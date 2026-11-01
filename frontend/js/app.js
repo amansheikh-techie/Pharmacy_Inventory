@@ -571,16 +571,17 @@ let isBackendLive = false;
 function updateStatusBanner(isLive) {
   isBackendLive = isLive;
   const badge = document.querySelector(".demo-mode-badge");
-  const desc = document.querySelector(".demo-mode-banner span:nth-child(2)");
-  if (!badge || !desc) return;
-  if (isLive) {
-    badge.textContent = "Live MySQL";
-    badge.style.background = "var(--primary)";
-    desc.innerHTML = `<strong>Live MySQL Connected:</strong> Real-time synchronization active on <code>pharmacy_db</code>.`;
-  } else {
-    badge.textContent = "Clinical Demo Mode";
-    badge.style.background = "#0284c7";
-    desc.innerHTML = `<strong>Clinical Mock Store Active:</strong> Interactive in-memory dispensary. <em>(Start backend on http://localhost:5000 for MySQL sync)</em>`;
+  const banner = document.querySelector(".demo-mode-banner");
+  if (!banner) return;
+  const desc = banner.querySelector("span:not(.demo-mode-badge)");
+  if (badge) {
+    badge.textContent = isLive ? "Live MySQL" : "Clinical Demo Mode";
+    badge.style.background = isLive ? "var(--primary)" : "#0284c7";
+  }
+  if (desc) {
+    desc.innerHTML = isLive
+      ? `<strong>Live MySQL Connected:</strong> Real-time synchronization active on <code>pharmacy_db</code>.`
+      : `<strong>Clinical Mock Store Active:</strong> Interactive in-memory dispensary. <em>(Start backend on http://localhost:5000 for MySQL sync)</em>`;
   }
 }
 
@@ -618,17 +619,17 @@ function getMockDashboardSummary() {
   };
 }
 
-let liveMedicines = [];
-let liveCategories = [];
-let liveBatches = [];
+let liveMedicines = MockDB.medicines.slice();
+let liveCategories = MockDB.categories.slice();
+let liveBatches = MockDB.batches.slice();
 let liveReports = { lowStock: [], expiry: [] };
-let liveSales = [];
-let livePatients = [];
-let liveDoctors = [];
-let livePrescriptions = [];
+let liveSales = MockDB.sales.slice();
+let livePatients = MockDB.patients.slice();
+let liveDoctors = MockDB.doctors.slice();
+let livePrescriptions = MockDB.prescriptions.slice();
 
 // Phase 5A Live Reports & Dashboard State
-let liveDashboardSummary = null;
+let liveDashboardSummary = getMockDashboardSummary();
 let isDashboardLoading = false;
 let dashboardApiError = null;
 let liveSalesSummary = null;
