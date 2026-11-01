@@ -3025,7 +3025,7 @@ async function showPrescriptionDetails(rxId) {
   const modalBody = document.getElementById("view-rx-modal-body");
   if (!modalBody) return;
 
-    modalBody.innerHTML = `
+  modalBody.innerHTML = `
       <div style="background:#ffffff; border:1px solid var(--border); border-radius:var(--radius-md); padding:20px; font-family:var(--font-sans);">
         <div style="display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2px solid var(--border); padding-bottom:14px; margin-bottom:14px;">
           <div>
@@ -3090,11 +3090,7 @@ async function showPrescriptionDetails(rxId) {
       </div>
     `;
 
-    openModal("modal-view-prescription");
-  } catch (err) {
-    console.error("Error fetching prescription details:", err);
-    showToast(err.message || "Failed to load prescription details.", "error");
-  }
+  openModal("modal-view-prescription");
 }
 
 // Prepare dispense from prescription in POS (navigates without auto-deducting inventory)
@@ -3223,11 +3219,7 @@ async function showInvoiceDetails(saleId) {
       </div>
     `;
 
-    openModal("modal-view-invoice");
-  } catch (err) {
-    console.error("Error fetching invoice:", err);
-    showToast(err.message || "Failed to load receipt details.", "error");
-  }
+  openModal("modal-view-invoice");
 }
 
 // =====================================================================
