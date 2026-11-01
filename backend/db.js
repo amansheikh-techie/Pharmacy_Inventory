@@ -9,7 +9,7 @@ require('dotenv').config();
 
 // Create a connection pool using environment variables
 // Connection pooling manages multiple reusable connections efficiently
-const pool = mysql.createPool({
+const poolConfig = {
   host: process.env.DB_HOST || 'localhost',
   user: process.env.DB_USER || 'root',
   password: process.env.DB_PASSWORD || '',
@@ -18,7 +18,14 @@ const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0
-});
+};
+
+// Enable SSL automatically for cloud-hosted databases (e.g. TiDB, Aiven, Railway)
+if (process.env.DB_SSL === 'true' || (process.env.DB_HOST && process.env.DB_HOST !== 'localhost' && process.env.DB_HOST !== '127.0.0.1')) {
+  poolConfig.ssl = { rejectUnauthorized: false };
+}
+
+const pool = mysql.createPool(poolConfig);
 
 /**
  * Tests database connectivity and properly releases the connection.
