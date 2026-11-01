@@ -559,7 +559,11 @@ function renderLowStockAlertList() {
 // =====================================================================
 // Phase 3C, 3D, 4B, 4C, 4D & 5A: Live MySQL State & Fetchers
 // Auto-detect backend on file:// or same-origin
-const API_BASE = (window.location.protocol === 'file:') ? 'http://localhost:5000' : '';
+const API_BASE = (window.location.protocol === 'file:')
+  ? 'http://localhost:5000'
+  : (window.location.hostname.includes('github.io'))
+    ? 'https://pharmacy-care-rx.onrender.com'
+    : '';
 
 async function apiFetch(path, options = {}) {
   const url = (path.startsWith('http://') || path.startsWith('https://')) ? path : `${API_BASE}${path}`;
